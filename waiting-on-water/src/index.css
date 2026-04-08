@@ -1,0 +1,89 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply m-0 min-h-svh bg-white text-slate-800 antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+}
+
+/* Hero: subtle dark overlay — keeps turquoise water bright, text readable */
+.bg-hero-lake {
+  background-image: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.55) 0%,
+    rgba(15, 23, 42, 0.28) 40%,
+    rgba(15, 23, 42, 0.5) 70%,
+    rgba(15, 23, 42, 0.88) 100%
+  );
+}
+
+/* Section gradient bands */
+.bg-band-teal {
+  background: linear-gradient(180deg, #f0fdfa 0%, #ecfeff 40%, #f8fafc 100%);
+}
+
+.bg-band-deep {
+  background: linear-gradient(165deg, #0f172a 0%, #0e7490 42%, #0f766e 100%);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.75s ease-out both;
+}
+
+.animate-delay-1 {
+  animation-delay: 0.1s;
+}
+.animate-delay-2 {
+  animation-delay: 0.2s;
+}
+.animate-delay-3 {
+  animation-delay: 0.3s;
+}
+
+.animate-float-soft {
+  animation: float-soft 5s ease-in-out infinite;
+}
+
+@layer components {
+  .card-lift {
+    @apply transition duration-300 ease-out;
+  }
+  .card-lift:hover {
+    @apply -translate-y-1 shadow-xl shadow-teal-900/10;
+  }
+}
