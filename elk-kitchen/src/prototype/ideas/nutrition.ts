@@ -6,7 +6,7 @@
 // have none at all, because no nutrition source has been chosen (Q2).
 
 import type { Recipe } from "../../types/recipe";
-import type { Provenance } from "./types";
+import type { Ingredient, Provenance, SampleIdea } from "./types";
 
 export type NutrientKey = "calories" | "protein" | "carbs" | "fat" | "fibre";
 
@@ -53,4 +53,24 @@ export function nutritionForSample(): Nutrition {
 export function formatNutrient(v: NutrientValue, unit: string): string {
   const n = unit === "kcal" ? Math.round(v.amount) : Math.round(v.amount * 10) / 10;
   return `${v.provenance === "verified" ? "" : "~"}${n} ${unit}`;
+}
+
+// What can honestly be said about a dish without a nutrition database: facts
+// read straight off its own ingredient list. These are counts and names, not
+// measurements, and the UI labels them that way.
+const FIBRE_RX = /\b(beans?|lentils?|chickpeas?|oats|flaxseed|brussels sprouts)\b/i;
+
+export function fibreSources(ingredients: Ingredient[]): string[] {
+  return ingredients.filter((i) => FIBRE_RX.test(i.name)).map((i) => i.name);
+}
+
+export type FoodFacts = { serves: number; vegetables: string[]; protein: string[]; fibre: string[] };
+
+export function foodFacts(idea: Pick<SampleIdea, "serves" | "ingredients">): FoodFacts {
+  return {
+    serves: idea.serves,
+    vegetables: idea.ingredients.filter((i) => i.veg).map((i) => i.name),
+    protein: idea.ingredients.filter((i) => i.protein).map((i) => i.name),
+    fibre: fibreSources(idea.ingredients),
+  };
 }

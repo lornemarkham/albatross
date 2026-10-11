@@ -73,6 +73,10 @@ export type Moment = {
   minutes: number | null;
   equipment: Equipment[];     // what they said they want to use
   people: number | null;
+  kids: boolean;              // "kids at the table" — only if they tapped it
+  // Where the weather came from, shown next to it: null when the person
+  // tapped it, or e.g. "12°C, rain · Open-Meteo" when they asked us to look.
+  weatherNote: string | null;
 };
 
 // The person's answers to "Do you have cheese?" — this visit only. A "yes"

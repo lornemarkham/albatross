@@ -198,9 +198,11 @@ export function simulateReply(input: string, samples: SampleIdea[], saved: Recip
 // real inputs; nothing invented.
 export function groundingFor(moment: Moment, pantry: PantryItem[], saved: RecipeSummary[], answers: Answers): string[] {
   const g: string[] = [`Today is ${moment.today}.`];
-  g.push(moment.weather ? `Weather: you said ${moment.weather}.` : "Weather: not known (no weather feed).");
+  g.push(!moment.weather ? "Weather: not known (only if you tap it, say it, or ask Kitchen to check)."
+    : moment.weatherNote ? `Weather: ${moment.weatherNote}.` : `Weather: you said ${moment.weather}.`);
   if (moment.minutes) g.push(`Time: about ${moment.minutes} minutes.`);
   if (moment.people) g.push(`Cooking for ${moment.people}.`);
+  if (moment.kids) g.push("Kids at the table.");
   if (moment.equipment.length) g.push(`Wants to use: ${moment.equipment.join(", ")}.`);
   g.push(pantry.length ? `Pantry: ${pantry.filter((p) => p.onHand > 0).length} products in stock (cupboard/freezer only — fridge unknown).` : "Pantry: not connected.");
   const yes = Object.entries(answers).flatMap(([k, v]) => (v === "yes" ? [k] : typeof v === "object" ? [v.said] : []));

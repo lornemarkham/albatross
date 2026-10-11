@@ -7,7 +7,9 @@
 
 import type { RecipeSummary } from "../../types/recipe";
 import { upcomingHolidays, seasonOf, whenLabel } from "./context";
-import { pantryFit, possibleMatches, type PantryFit } from "./pantryMatch";
+import { saidWords } from "./haveChips";
+import { fibreSources } from "./nutrition";
+import { answerKey, daysBetween, pantryFit, possibleMatches, type PantryFit } from "./pantryMatch";
 import type { Answers, Moment, Mood, PantryItem, SampleIdea } from "./types";
 
 export type IdeaKey = "tonight" | "pantry" | "protein" | "healthy" | "quick" | "bbq" | "favourites" | "surprise";
@@ -98,6 +100,7 @@ function contextReasons(s: SampleIdea, fit: PantryFit, moment: Moment): { score:
     else score -= 4;
   }
   if (moment.equipment.length && s.equipment.some((e) => moment.equipment.includes(e))) score += 1;
+  if (moment.kids && has(s, "kids")) { score += 2; reasons.push("Mild and family-friendly"); }
 
   const season = seasonOf(moment.today);
   if ((season === "autumn" || season === "winter") && has(s, "comfort")) score += 0.5;
@@ -140,11 +143,15 @@ const SAVED_WORDS: Partial<Record<IdeaKey, RegExp>> = {
 
 function savedFor(key: IdeaKey, ctx: Ctx): SavedSuggestion[] {
   const out: SavedSuggestion[] = [];
+  const today = ctx.moment.today;
   for (const r of ctx.saved) {
     const reasons: string[] = [];
+    // Don't offer tonight what the family recorded cooking in the last few days.
+    if ((key === "tonight" || key === "surprise") && cookedRecently(r, today)) continue;
     if (key === "favourites" || key === "tonight") {
       if (r.favourite) reasons.push("★ You marked it a favourite");
       if (r.timesCooked >= 2) reasons.push(`Cooked ${r.timesCooked} times${r.lastCookedOn ? ` · last ${shortDate(r.lastCookedOn)}` : ""}`);
+      if (reasons.length && r.lastCookedOn && daysBetween(r.lastCookedOn, today) >= 30) reasons.push(`Not made since ${shortDate(r.lastCookedOn)}`);
     }
     if (key === "pantry") {
       const m = possibleMatches(r.ingredients, ctx.pantry);
@@ -159,8 +166,9 @@ function savedFor(key: IdeaKey, ctx: Ctx): SavedSuggestion[] {
     }
     if (reasons.length) out.push({ recipe: r, reasons });
   }
-  if (key === "surprise" && ctx.saved.length) {
-    const r = shuffled(ctx.saved, ctx.seed ?? 1)[0];
+  const fresh = ctx.saved.filter((r) => !cookedRecently(r, today));
+  if (key === "surprise" && fresh.length) {
+    const r = shuffled(fresh, ctx.seed ?? 1)[0];
     out.push({ recipe: r, reasons: [r.timesCooked === 0 ? "Saved but nobody has recorded cooking it yet" : `Last cooked ${r.lastCookedOn ? shortDate(r.lastCookedOn) : "a while ago"}`] });
   }
   return out.slice(0, 4);
@@ -204,8 +212,10 @@ export function shelfFor(key: IdeaKey, ctx: Ctx): Shelf {
   }
   if (key === "tonight") pool = pool.filter((s) => s.idea.course === "main");
   if (key === "surprise") {
-    const pick = shuffled(pool.filter((s) => s.idea.course !== "side"), ctx.seed ?? 1).slice(0, 2);
-    return { samples: pick.map((s) => ({ ...s, reasons: ["Something different", ...s.reasons] })), saved: saved.slice(0, 1), note };
+    // A few proper dinners — not snacks or sides — that suit the moment.
+    const dinners = pool.filter((s) => s.idea.course === "main" && s.score > -3);
+    const pick = shuffled(dinners, ctx.seed ?? 1).slice(0, 3);
+    return { samples: pick.map((s) => (s.reasons.length ? s : { ...s, reasons: [describe(s.idea)] })), saved: saved.slice(0, 1), note };
   }
 
   const samples = pool
@@ -220,4 +230,136 @@ export function reasonsFor(idea: SampleIdea, pantry: PantryItem[], answers: Answ
   const fit = pantryFit(idea.ingredients, pantry, answers, moment.today);
   const { reasons } = contextReasons(idea, fit, moment);
   return { fit, reasons: reasons.length ? reasons : [describe(idea)] };
+}
+
+export const RECENT_DAYS = 3;
+
+// Whole-word mention of `word` in free text ("rice" in "2 cups rice", not "price").
+function mentions(text: string, word: string): boolean {
+  const escaped = word.replace(/[.*+?^$()|[\]\\{}]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+}
+
+export function cookedRecently(r: RecipeSummary, today: string): boolean {
+  if (!r.lastCookedOn) return false;
+  const d = daysBetween(r.lastCookedOn, today);
+  return d >= 0 && d < RECENT_DAYS;
+}
+
+export function list(xs: string[]): string {
+  return xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+}
+
+// "Use what we have": ideas ranked by how much of them the person has said
+// (or Pantry shows) is in the kitchen. Only ideas that use at least one of
+// those things appear, and the reason names them.
+export function haveShelf(ctx: Ctx): Shelf {
+  const words = saidWords(ctx.answers);
+  const samples = ctx.samples
+    .map((idea) => {
+      const fit = pantryFit(idea.ingredients, ctx.pantry, ctx.answers, ctx.moment.today);
+      const c = contextReasons(idea, fit, ctx.moment);
+      const onHand = fit.statuses.flatMap(({ ingredient, status }) => {
+        if (status.state !== "have") return [];
+        const a = ctx.answers[answerKey(ingredient)];
+        return [typeof a === "object" ? a.said : ingredient.name];
+      });
+      const uses = [...new Set(onHand)];
+      const reasons = [
+        ...(fit.total > 0 && fit.have === fit.total ? [] : uses.length ? [`Uses your ${list(uses.slice(0, 3))}`] : []),
+        ...c.reasons,
+      ];
+      const score = fit.have * 2 + (fit.have / Math.max(1, fit.total)) * 4 - fit.out * 2 + c.score + (idea.course === "main" ? 1 : 0);
+      return { idea, fit, reasons, score };
+    })
+    .filter((s) => s.fit.have > 0)
+    .sort((a, b) => b.score - a.score || a.idea.minutes - b.idea.minutes)
+    .slice(0, 4);
+
+  const saved: SavedSuggestion[] = [];
+  for (const r of ctx.saved) {
+    const text = r.ingredients.toLowerCase();
+    const mentioned = words.filter((w) => mentions(text, w));
+    const pantryHits = possibleMatches(r.ingredients, ctx.pantry).map((m) => m.item.name);
+    const reasons = [
+      ...(mentioned.length ? [`Your recipe mentions ${list(mentioned.slice(0, 3))}`] : []),
+      ...(pantryHits.length ? [`Pantry may have: ${pantryHits.slice(0, 3).join(", ")}`] : []),
+    ];
+    if (reasons.length) saved.push({ recipe: r, reasons });
+  }
+  return { samples, saved: saved.slice(0, 4), note: null };
+}
+
+// "I'm in the mood for…": a few taps narrow the ideas. Meal, "with …", BBQ
+// and the time the person gave are firm; feelings and goals only rank. If
+// nothing fits everything, the firm rules loosen one at a time and Kitchen
+// says which.
+export type Meal = "dinner" | "lunch" | "snack" | "side";
+export type Feel = "comfort" | "fresh" | "bbq";
+export type Goal = "protein" | "veg" | "fibre";
+export type WithIngredient = "chicken" | "turkey" | "beans" | "pasta" | "potatoes" | "cheese";
+export type MoodFilters = { meal: Meal | null; feel: Feel | null; goal: Goal | null; with: WithIngredient | null };
+export const NO_MOOD: MoodFilters = { meal: null, feel: null, goal: null, with: null };
+
+export const WITH_RX: Record<WithIngredient, RegExp> = {
+  chicken: /\bchicken (thigh|breast)/i,
+  turkey: /\bturkey\b/i,
+  beans: /\b(beans?|lentils?|chickpeas?)\b/i,
+  pasta: /\bpasta\b/i,
+  potatoes: /\bpotato/i,
+  cheese: /\b(cheese|cheddar|feta|parmesan)\b/i,
+};
+const WITH_SAVED_RX: Record<WithIngredient, RegExp> = { ...WITH_RX, chicken: /\bchicken\b(?! stock| broth)/i };
+
+export type MoodShelf = Shelf & { loosened: string[] };
+
+export function moodShelf(f: MoodFilters, ctx: Ctx): MoodShelf {
+  type Rule = { label: string; ok: (s: SampleIdea) => boolean };
+  const rules: Rule[] = [];
+  if (f.with) rules.push({ label: `with ${f.with}`, ok: (s) => s.ingredients.some((i) => WITH_RX[f.with!].test(i.name)) });
+  if (f.feel === "bbq") rules.push({ label: "on the BBQ", ok: (s) => s.equipment.includes("bbq") });
+  if (ctx.moment.minutes !== null) rules.push({ label: `in ${ctx.moment.minutes} minutes`, ok: (s) => s.minutes <= ctx.moment.minutes! });
+  if (f.meal) rules.push({ label: f.meal === "side" ? "a side dish" : f.meal === "snack" ? "a snack" : `for ${f.meal}`, ok: (s) => (f.meal === "snack" ? s.course === "snack" : f.meal === "side" ? s.course === "side" : s.course === "main") });
+
+  // Loosen from the least important (with) to the most (meal).
+  let active = rules;
+  const loosened: string[] = [];
+  let pool = ctx.samples.filter((s) => active.every((r) => r.ok(s)));
+  while (!pool.length && active.length) {
+    loosened.push(active[0].label);
+    active = active.slice(1);
+    pool = ctx.samples.filter((s) => active.every((r) => r.ok(s)));
+  }
+
+  const samples = pool.map((idea) => {
+    const fit = pantryFit(idea.ingredients, ctx.pantry, ctx.answers, ctx.moment.today);
+    const c = contextReasons(idea, fit, ctx.moment);
+    const why: string[] = [];
+    // With no meal chosen, lean towards dinner — it's the question being asked.
+    let score = c.score + (!f.meal && idea.course === "main" ? 1.5 : 0);
+    if (f.with && WITH_RX[f.with].test(idea.ingredients.map((i) => i.name).join("|"))) {
+      why.push(`Made with ${idea.ingredients.find((i) => WITH_RX[f.with!].test(i.name))!.name}`);
+    }
+    if (f.feel === "comfort" && has(idea, "comfort")) { score += 4; why.push("Warm and comforting"); }
+    if (f.feel === "fresh" && (has(idea, "fresh") || has(idea, "no-cook"))) { score += 4; why.push("Fresh and light"); }
+    if (f.feel === "bbq") why.push("Made on the BBQ");
+    if (f.goal === "protein" && has(idea, "protein")) { score += 4; why.push(`Built around ${proteinNames(idea).slice(0, 2).join(" and ")}`); }
+    if (f.goal === "veg") { const n = vegCount(idea); score += n; if (n >= 3) why.push(`${n} kinds of vegetables`); }
+    if (f.goal === "fibre") { const fib = fibreSources(idea.ingredients); score += fib.length * 3; if (fib.length) why.push(`Fibre from ${list(fib.slice(0, 2))}`); }
+    const reasons = [...why, ...c.reasons.filter((r) => !why.includes(r))];
+    return { idea, fit, reasons: reasons.length ? reasons : [describe(idea)], score };
+  }).sort((a, b) => b.score - a.score || a.idea.minutes - b.idea.minutes).slice(0, 4);
+
+  const saved: SavedSuggestion[] = [];
+  const goalWords = f.goal === "protein" ? SAVED_WORDS.protein : f.goal === "veg" ? SAVED_WORDS.healthy : null;
+  for (const r of ctx.saved) {
+    const hay = `${r.title}\n${r.ingredients}\n${r.tags.join(" ")}`;
+    const reasons: string[] = [];
+    if (f.with) { const m = hay.match(WITH_SAVED_RX[f.with]); if (m) reasons.push(`Mentions ${m[0].toLowerCase()}`); else continue; }
+    if (f.feel === "bbq") { const m = hay.match(SAVED_WORDS.bbq!); if (m) reasons.push(`Mentions ${m[0].toLowerCase()}`); else continue; }
+    if (goalWords) { const m = hay.match(goalWords); if (m && !reasons.includes(`Mentions ${m[0].toLowerCase()}`)) reasons.push(`Mentions ${m[0].toLowerCase()}`); }
+    if (r.favourite) reasons.push("★ You marked it a favourite");
+    if (reasons.length) saved.push({ recipe: r, reasons });
+  }
+  return { samples, saved: saved.slice(0, 2), note: null, loosened };
 }

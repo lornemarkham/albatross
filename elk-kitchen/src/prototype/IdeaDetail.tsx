@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { nutritionForSample } from "./ideas/nutrition";
+import { foodFacts, nutritionForSample } from "./ideas/nutrition";
 import { sampleById } from "./ideas/sampleIdeas";
 import { reasonsFor } from "./ideas/suggest";
-import { FoodArt, NutritionPanel, PantryCheck, PrototypeHeader, PrototypeRibbon, Reasons, chipClass, display } from "./components";
+import { photoFor } from "./photos";
+import { DishImage, NutritionPanel, PantryCheck, PrototypeHeader, PrototypeRibbon, Reasons, chipClass, display } from "./components";
 import { useIdeas } from "./IdeasSession";
 
 const NEEDS_AI = ["Dairy-free", "Without an oven", "Use up my spinach", "Make it spicier"];
@@ -13,7 +14,7 @@ export function IdeaDetail() {
   const [params] = useSearchParams();
   const idea = sampleById(id);
   const { pantry, answers, moment } = useIdeas();
-  const [serves, setServes] = useState(() => Number(params.get("serves")) || idea?.serves || 4);
+  const [serves, setServes] = useState(() => Number(params.get("serves")) || moment.people || idea?.serves || 4);
   const [change, setChange] = useState<string | null>(null);
 
   if (!idea) {
@@ -39,19 +40,19 @@ export function IdeaDetail() {
 
       <article className="mx-auto mt-4 grid max-w-6xl gap-8 px-4 sm:px-6 lg:grid-cols-[1.1fr_1fr]">
         <div className="lg:sticky lg:top-6 lg:self-start">
-          <FoodArt emoji={idea.emoji} palette={idea.palette} big className="aspect-[4/3] rounded-[2rem] shadow-[0_24px_60px_-24px_rgba(61,44,34,0.55)]" />
-          <p className="mt-3 text-xs text-cocoa/50">Illustration — Kitchen has no recipe photos yet.</p>
+          <DishImage idea={idea} big className="aspect-[4/3] rounded-[2rem] shadow-[0_24px_60px_-24px_rgba(61,44,34,0.55)]" />
+          <PhotoCaption id={idea.id} />
         </div>
 
         <div>
           <p className="inline-block rounded-full bg-butter px-3 py-1 text-xs font-semibold text-cocoa/70 ring-1 ring-saffron/30">
-            Sample idea written for this prototype · not a family recipe
+            Example idea written for this prototype · not a family recipe
           </p>
           <h1 className={`${display} mt-3 text-4xl leading-tight tracking-tight sm:text-5xl`}>{idea.title}</h1>
           <p className="mt-3 text-lg leading-relaxed text-cocoa/75">{idea.blurb}</p>
 
           <div className="mt-5 flex flex-wrap items-center gap-2 text-sm">
-            <span className="rounded-full bg-white px-3 py-1.5 ring-1 ring-cocoa/10">⏱ About {idea.minutes} min</span>
+            <span className="rounded-full bg-white px-3 py-1.5 font-semibold ring-1 ring-cocoa/10">⏱ About {idea.minutes} min</span>
             <span className="inline-flex items-center gap-1 rounded-full bg-white py-1 pl-3 pr-1 ring-1 ring-cocoa/10">
               Serves
               <button type="button" aria-label="Fewer" onClick={() => setServes((n) => Math.max(1, n - 1))} className="grid h-7 w-7 place-items-center rounded-full bg-cocoa/5 hover:bg-cocoa/10">−</button>
@@ -120,7 +121,9 @@ export function IdeaDetail() {
 
             <NutritionPanel
               nutrition={nutritionForSample()}
-              note="No nutrition source has been chosen yet, so Kitchen won't show numbers for this idea. Once one is, each value will say whether it's verified or an estimate."
+              facts={foodFacts(idea)}
+              serves={serves}
+              note="No nutrition source has been chosen yet, so Kitchen shows no calorie, protein or fibre numbers. Once one is, each value will say whether it's verified or an estimate."
             />
 
             <section>
@@ -129,7 +132,7 @@ export function IdeaDetail() {
                 {idea.steps.map((s, i) => (
                   <li key={i} className="flex gap-3">
                     <span className={`${display} grid h-8 w-8 shrink-0 place-items-center rounded-full bg-saffron/20 text-lg text-cocoa`}>{i + 1}</span>
-                    <p className="pt-1 leading-relaxed">{s}</p>
+                    <p className="pt-1 text-[17px] leading-relaxed">{s}</p>
                   </li>
                 ))}
               </ol>
@@ -142,5 +145,17 @@ export function IdeaDetail() {
         </section>
       </article>
     </div>
+  );
+}
+
+function PhotoCaption({ id }: { id: string }) {
+  const photo = photoFor(id);
+  if (!photo) return <p className="mt-3 text-xs text-cocoa/50">Illustration — no photo of this dish yet.</p>;
+  const c = photo.credit;
+  return (
+    <p className="mt-3 text-xs leading-relaxed text-cocoa/50">
+      Photo of a similar dish ({c.depicts}), not this recipe. <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="underline">{c.author}</a>,{" "}
+      {c.licenseUrl ? <a href={c.licenseUrl} target="_blank" rel="noreferrer" className="underline">{c.license}</a> : c.license}, via Wikimedia Commons.
+    </p>
   );
 }

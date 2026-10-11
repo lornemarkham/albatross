@@ -1,15 +1,42 @@
 # Prototype — "What should we cook today?"
 
-**Status:** Phase 1 design prototype (2026-10-10). Not a product decision.
+**Status:** Phase 2 design prototype (2026-10-10). Not a product decision.
 Everything here is **Proposed** in the sense of the
 [product doctrine](../KITCHEN-PRODUCT-DOCTRINE.md). It doesn't close any open
 question in §12, and it doesn't authorise building the backend it sketches.
 
 ## How to look at it
 
+**Online:** https://elk-kitchen.vercel.app/ideas — no Vercel login.
+
 ```
-npm run dev            # then open http://localhost:5173/ideas
+npm run dev            # or locally: http://localhost:5173/ideas
 ```
+
+### Why the public URL is safe
+
+- Production Kitchen is built **without** Supabase variables (README step 5
+  hasn't been done). So every visitor's Kitchen, `/ideas` included, reads
+  only **that visitor's own browser storage**. There's no family data on the
+  server for it to show.
+- If the Supabase variables are added later, `/ideas` sits inside the same
+  family sign-in and RLS check as the rest of Kitchen, so it stays private.
+- The sample Pantry is pretend data and is **off by default**. Nothing reads
+  Inventory.
+- `.vercelignore` stops `.env.local` (shared Supabase project) being
+  uploaded to a Vercel build.
+
+### Deploying (and removing) it
+
+```
+vercel --prod --build-env VITE_KITCHEN_PROTOTYPE=1
+```
+
+Run this from this directory. The flag only adds the lazy `/ideas` chunk.
+Every other route is byte-for-byte the normal app. A plain `vercel --prod`
+(or a git build) leaves `/ideas` out again, so it fails safe: the prototype
+just disappears. To roll back instantly, promote the previous deployment
+with `vercel promote <url>`.
 
 - The route only exists in the dev server, or in a build made with
   `VITE_KITCHEN_PROTOTYPE=1`. A normal `npm run build` leaves it out entirely
@@ -25,7 +52,47 @@ npm run dev            # then open http://localhost:5173/ideas
 Screens: `/ideas` (home), `/ideas/idea/:id` (an idea),
 `/ideas/cook/idea/:id` and `/ideas/cook/saved/:recipeId` (cook along).
 
-## What it shows
+## Phase 2 changes (what's new)
+
+- **Three ways in**, plus ideas on first load. *Surprise me* gives three
+  dinners (mains only) with a 🎲 re-roll. *Use what we have* is about 26 tap
+  chips (chicken, peppers, rice…). *I'm in the mood for…* offers meal,
+  feeling, "something with…" and an eating-well goal. Before anyone taps,
+  "A few ideas for tonight" is already showing.
+- **About tonight** (optional): who's eating (2/4/6/8+, kids too), time,
+  weather. Cards open scaled to the number of people.
+- **Weather**: tap a chip, or **📍 Check**. That asks once for location,
+  rounds it to about 10 km, and calls Open-Meteo (no key, nothing stored).
+  The source is shown ("12°C, rain nearby · Open-Meteo").
+- **Recently cooked**: family recipes recorded in the last 3 days aren't
+  offered for tonight or Surprise. Long-unmade favourites say "Not made
+  since Aug 1".
+- **Use what we have** is honest by default. Pantry starts *not connected*.
+  A chip confirms only what its word covers ("onions" isn't the red onion),
+  and the person's own word is quoted back. Family recipes only ever get
+  "Your recipe mentions rice".
+- **Mood narrowing.** Meal, "with…", BBQ and time are firm rules. Feelings
+  and goals only rank. If nothing fits, rules loosen one at a time and the
+  page says which ("these leave out **with potatoes**").
+- **Nutrition**: alongside the blank numbers ("Not measured"), it now shows
+  facts read off the ingredient list: vegetables (count and names), protein
+  from, fibre from, and serving as 1 of N. It's labelled *"Read from the
+  ingredient list · not measured"*.
+- **Cards**: larger, with a clear ⏱ time, serves, key ingredients, and
+  photos where openly licensed ones exist (`src/prototype/photos/`, Wikimedia
+  Commons, credited, labelled "a similar dish, not this recipe"). Photos are
+  imported by the prototype chunk, so normal builds don't carry them.
+- **Cook-along**:
+  - Timers **keep running across steps**. Before, they reset when you moved
+    on.
+  - Several can run at once, they ring (beeps, plus vibration on phones),
+    and you can tap one to jump back to its step.
+  - "For this step" shows scaled quantities. If a word is ambiguous it shows
+    nothing rather than the wrong amount.
+  - Bigger/smaller text, ←/→/space keys, tappable progress steps, and an
+    ingredient list you can tick off.
+
+## What it shows (phase 1, still true unless changed above)
 
 1. **Today's ideas.** Eight invitations: Tonight, Use what we have,
    High-protein, Something healthy, Quick and easy, Fire up the BBQ, Family
@@ -94,9 +161,9 @@ Screens: `/ideas` (home), `/ideas/idea/:id` (an idea),
 
 | | |
 |---|---|
-| **Functional** | Reading family recipes, favourites and history; reasons drawn from them; date/season/holiday logic; ingredient-status logic and "use soon"; scaling; cook-along with timers and wake lock; session-only answers and context |
-| **Simulated** | Chat replies (`ideas/conversation.ts`, keyword rules); the 13 sample ideas (`ideas/sampleIdeas.ts`, hand-written ordinary home dishes, rough times); the sample Pantry (`ideas/samplePantry.ts`); the "Change it" examples |
-| **Deliberately absent** | Any nutrition numbers for samples; live weather; household location; inferred tastes; saving anything; shopping list (Q9); pantry deductions |
+| **Functional** | Reading recipes, favourites and history (the browser's own, or the family's once shared); reasons drawn from them; recently-cooked filtering; date/season/holiday logic; opt-in Open-Meteo weather; "use what we have" taps; mood narrowing; ingredient-status logic and "use soon"; ingredient-list nutrition facts; scaling; cook-along with persistent timers, alarms and wake lock |
+| **Simulated** | "Or just say it" replies (`ideas/conversation.ts`, keyword rules); the 13 example ideas (`ideas/sampleIdeas.ts`, hand-written, rough times); the pretend Pantry (`ideas/samplePantry.ts`, off by default); the "Change it" examples |
+| **Deliberately absent** | Calorie/protein/fibre numbers; real Pantry; stored location; inferred tastes; saving anything; shopping list (Q9); pantry deductions |
 
 ## What needs backend work
 

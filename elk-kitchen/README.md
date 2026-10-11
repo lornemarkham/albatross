@@ -16,8 +16,9 @@ npm run typecheck
 npm run build
 ```
 
-**Prototype:** a "What should we cook today?" home is at `/ideas` in
-`npm run dev` only (read-only, not in production builds). See
+**Prototype:** a "What should we cook tonight?" home is at `/ideas`
+(read-only). It's in `npm run dev`, and in production only when deployed with
+`--build-env VITE_KITCHEN_PROTOTYPE=1`. See
 [`docs/prototypes/WHAT-SHOULD-WE-COOK.md`](docs/prototypes/WHAT-SHOULD-WE-COOK.md).
 
 ## Where recipes are saved

@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import type { RecipeSummary } from "../types/recipe";
 import { answerKey, type PantryFit } from "./ideas/pantryMatch";
-import { NUTRIENTS, PROVENANCE_LABEL, formatNutrient, type Nutrition } from "./ideas/nutrition";
+import { NUTRIENTS, PROVENANCE_LABEL, formatNutrient, type FoodFacts, type Nutrition } from "./ideas/nutrition";
+import type { SampleIdea } from "./ideas/types";
+import { photoFor } from "./photos";
 import type { SampleSuggestion, SavedSuggestion } from "./ideas/suggest";
 import { ingredientLine } from "./ideas/scale";
 import { useIdeas } from "./IdeasSession";
@@ -29,6 +31,18 @@ export function FoodArt({ emoji, palette, className = "", big = false }: { emoji
   );
 }
 
+// A sample idea's picture: an openly licensed photo of a similar dish when
+// one was found, otherwise the illustrated tile.
+export function DishImage({ idea, className = "", big = false }: { idea: SampleIdea; className?: string; big?: boolean }) {
+  const photo = photoFor(idea.id);
+  if (!photo) return <FoodArt emoji={idea.emoji} palette={idea.palette} className={className} big={big} />;
+  return (
+    <div className={`relative overflow-hidden bg-clay ${className}`}>
+      <img src={photo.url} alt={`Photo of ${photo.credit.depicts}`} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+    </div>
+  );
+}
+
 const SAVED_PALETTES: [string, string][] = [["#f3d5b5", "#a47148"], ["#e9edc9", "#ccd5ae"], ["#ffe8d6", "#cb997e"], ["#fefae0", "#dda15e"]];
 export function savedPalette(title: string): [string, string] {
   let h = 0;
@@ -49,8 +63,8 @@ export function Reasons({ reasons, max = 2 }: { reasons: string[]; max?: number 
   return (
     <ul className="space-y-1">
       {reasons.slice(0, max).map((r) => (
-        <li key={r} className="flex gap-2 text-sm leading-snug text-cocoa/85">
-          <span className="text-saffron" aria-hidden>●</span>{r}
+        <li key={r} className="flex gap-2 text-[15px] leading-snug text-cocoa/85">
+          <span className="text-saffron" aria-hidden>●</span><span>{r}</span>
         </li>
       ))}
     </ul>
@@ -59,20 +73,25 @@ export function Reasons({ reasons, max = 2 }: { reasons: string[]; max?: number 
 
 export function SampleCard({ s, serves }: { s: SampleSuggestion; serves?: number | null }) {
   const { idea, fit } = s;
+  const key = idea.ingredients.filter((i) => i.kind !== "basic").slice(0, 4).map((i) => i.name);
   return (
     <Link
       to={`/ideas/idea/${idea.id}${serves ? `?serves=${serves}` : ""}`}
-      className="group flex h-full flex-col overflow-hidden rounded-3xl bg-white shadow-[0_2px_0_rgba(61,44,34,0.06),0_12px_30px_-12px_rgba(61,44,34,0.25)] ring-1 ring-cocoa/5 transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-14px_rgba(61,44,34,0.35)]"
+      className="group flex h-full flex-col overflow-hidden rounded-3xl bg-white shadow-[0_2px_0_rgba(61,44,34,0.06),0_12px_30px_-12px_rgba(61,44,34,0.25)] ring-1 ring-cocoa/5 transition hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-14px_rgba(61,44,34,0.35)] focus-visible:outline-4 focus-visible:outline-saffron"
     >
       <div className="relative">
-        <FoodArt emoji={idea.emoji} palette={idea.palette} className="aspect-[4/3] transition group-hover:scale-[1.02]" />
-        <Badge tone="sample">Sample idea</Badge>
-        <span className="absolute right-3 top-3 rounded-full bg-cocoa/80 px-2.5 py-1 text-xs font-semibold text-butter">~{idea.minutes} min</span>
+        <DishImage idea={idea} className="aspect-[4/3] transition group-hover:scale-[1.02]" />
+        <Badge tone="sample">Example idea</Badge>
       </div>
-      <div className="flex flex-1 flex-col gap-3 p-4">
-        <h3 className={`${display} text-xl leading-tight text-cocoa`}>{idea.title}</h3>
+      <div className="flex flex-1 flex-col gap-3 p-5">
+        <h3 className={`${display} text-2xl leading-tight text-cocoa`}>{idea.title}</h3>
+        <p className="flex flex-wrap gap-x-4 gap-y-1 text-[15px] font-semibold text-cocoa">
+          <span>⏱ {idea.minutes} min</span>
+          <span className="text-cocoa/70">Serves {serves ?? idea.serves}</span>
+        </p>
         <Reasons reasons={s.reasons} />
-        <p className="mt-auto pt-1 text-xs font-medium text-leaf">{fitLine(fit)}</p>
+        <p className="text-sm leading-snug text-cocoa/60">{key.join(" · ")}</p>
+        <p className="mt-auto pt-1 text-sm font-medium text-leaf">{fitLine(fit)}</p>
       </div>
     </Link>
   );
@@ -95,8 +114,8 @@ export function SavedCard({ s }: { s: SavedSuggestion | { recipe: RecipeSummary;
         <Badge tone="family">Family recipe</Badge>
         {r.favourite && <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2 py-1 text-sm" aria-label="Your favourite">★</span>}
       </div>
-      <div className="flex flex-1 flex-col gap-2 p-4">
-        <h3 className={`${display} text-xl leading-tight text-cocoa`}>{r.title}</h3>
+      <div className="flex flex-1 flex-col gap-2 p-5">
+        <h3 className={`${display} text-2xl leading-tight text-cocoa`}>{r.title}</h3>
         {r.authorName && <p className="text-sm text-cocoa/60">from {r.authorName}</p>}
         <Reasons reasons={s.reasons} />
       </div>
@@ -166,48 +185,67 @@ function UndoAnswer({ onClick }: { onClick: () => void }) {
   return <button type="button" onClick={onClick} className="ml-1.5 text-cocoa/40 underline hover:text-cocoa">change</button>;
 }
 
-export function NutritionPanel({ nutrition, note }: { nutrition: Nutrition; note: string }) {
-  const known = Object.keys(nutrition.perServing).length;
+export function NutritionPanel({ nutrition, facts, serves, note }: { nutrition: Nutrition; facts?: FoodFacts; serves?: number; note: string }) {
+  const shown = NUTRIENTS.filter((n) => n.key !== "carbs" && n.key !== "fat");
   return (
     <section className="rounded-3xl bg-white p-5 ring-1 ring-cocoa/10">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className={`${display} text-xl text-cocoa`}>Nutrition</h3>
-        <span className="text-xs text-cocoa/50">{nutrition.servingKnown ? "per serving" : "serving size not recorded"}</span>
+        <span className="text-xs text-cocoa/50">{nutrition.servingKnown ? `per serving${serves ? ` · 1 of ${serves}` : ""}` : "serving size not recorded"}</span>
       </div>
-      <dl className="mt-3 grid grid-cols-5 gap-1.5 text-center">
-        {NUTRIENTS.map((n) => {
+
+      {facts && (
+        <>
+          <dl className="mt-3 space-y-2.5 text-[15px]">
+            <Fact label="Vegetables" value={facts.vegetables.length ? `${facts.vegetables.length} kind${facts.vegetables.length === 1 ? "" : "s"} — ${facts.vegetables.join(", ")}` : "None in the ingredient list"} />
+            <Fact label="Protein from" value={facts.protein.length ? facts.protein.join(", ") : "No main protein ingredient"} />
+            <Fact label="Fibre from" value={facts.fibre.length ? facts.fibre.join(", ") : "No beans, lentils or whole grains listed"} />
+          </dl>
+          <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-leaf">Read from the ingredient list · not measured</p>
+        </>
+      )}
+
+      <dl className="mt-4 grid grid-cols-3 gap-1.5 text-center">
+        {shown.map((n) => {
           const v = nutrition.perServing[n.key];
           return (
             <div key={n.key} className={`rounded-2xl px-1 py-2.5 ${v ? "bg-butter" : "border border-dashed border-cocoa/15 bg-cocoa/[0.03]"}`}>
-              <dt className="text-[10px] font-semibold uppercase tracking-wide text-cocoa/60 sm:text-[11px]">{n.label === "Carbohydrates" ? "Carbs" : n.label}</dt>
-              <dd className={`mt-1 text-sm font-semibold ${v ? "text-cocoa" : "text-cocoa/35"}`}>
-                {v ? formatNutrient(v, n.unit) : "—"}
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-cocoa/60">{n.label}</dt>
+              <dd className={`mt-1 text-sm font-semibold ${v ? "text-cocoa" : "text-cocoa/40"}`}>
+                {v ? formatNutrient(v, n.unit) : "Not measured"}
               </dd>
               {v && <dd className="mt-1 text-[10px] font-medium text-saffron">{PROVENANCE_LABEL[v.provenance].short}</dd>}
             </div>
           );
         })}
       </dl>
-      <p className="mt-3 text-xs leading-relaxed text-cocoa/60">
-        {known === 0 ? "Not known yet. " : ""}{note}
-      </p>
+      <p className="mt-3 text-xs leading-relaxed text-cocoa/60">{note}</p>
       <details className="mt-2 text-xs text-cocoa/60">
         <summary className="cursor-pointer font-medium text-cocoa/70">How Kitchen labels nutrition</summary>
         <ul className="mt-2 space-y-1">
           {(Object.keys(PROVENANCE_LABEL) as (keyof typeof PROVENANCE_LABEL)[]).map((k) => (
             <li key={k}><strong className="text-cocoa">{PROVENANCE_LABEL[k].short}:</strong> {PROVENANCE_LABEL[k].long}</li>
           ))}
-          <li><strong className="text-cocoa">—</strong> Not known. Kitchen leaves it blank rather than guess.</li>
+          <li><strong className="text-cocoa">Not measured:</strong> Kitchen leaves it blank rather than guess.</li>
         </ul>
       </details>
     </section>
   );
 }
 
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-3">
+      <dt className="w-28 shrink-0 font-semibold text-cocoa">{label}</dt>
+      <dd className="text-cocoa/80">{value}</dd>
+    </div>
+  );
+}
+
 export function PrototypeRibbon() {
   return (
     <div className="bg-cocoa px-4 py-2 text-center text-xs text-butter/90">
-      <strong className="font-semibold text-butter">Prototype.</strong> Ideas and chat replies are simulated. Your family recipes are real, and nothing on these pages is saved.{" "}
+      <strong className="font-semibold text-butter">Prototype.</strong> Example ideas are hand-written, not your recipes. Nothing here is saved.{" "}
       <a href="/ideas#whats-real" className="underline decoration-butter/40 underline-offset-2 hover:decoration-butter">What's real?</a>
     </div>
   );

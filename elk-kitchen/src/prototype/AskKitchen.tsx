@@ -28,7 +28,7 @@ export function AskBox() {
           id="ask"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Tell Kitchen what you're after…"
+          placeholder="e.g. “something warm, we have 30 minutes”"
           className="min-w-0 flex-1 bg-transparent py-2.5 text-base text-cocoa placeholder:text-cocoa/40 focus:outline-none"
           autoComplete="off"
         />
@@ -52,7 +52,7 @@ export function Conversation() {
   if (!thread.length) return null;
 
   return (
-    <section id="conversation" className="mx-auto max-w-6xl scroll-mt-4 px-4 sm:px-6">
+    <section id="conversation" className="mt-5 scroll-mt-4">
       <div className="rounded-[2rem] bg-white/70 p-4 ring-1 ring-cocoa/10 backdrop-blur sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className={`${display} text-2xl text-cocoa`}>Talking it through</h2>

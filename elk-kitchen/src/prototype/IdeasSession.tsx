@@ -6,6 +6,7 @@ import { localToday } from "./ideas/context";
 import { simulateReply, type Reply } from "./ideas/conversation";
 import { SAMPLE_IDEAS } from "./ideas/sampleIdeas";
 import { samplePantry } from "./ideas/samplePantry";
+import { NO_MOOD, type MoodFilters } from "./ideas/suggest";
 import type { Answers, Moment, PantryItem } from "./ideas/types";
 
 // What the person has told Kitchen during this visit. Held in memory only:
@@ -15,6 +16,13 @@ type Session = {
   setMoment: (patch: Partial<Moment>) => void;
   answers: Answers;
   answer: (key: string, value: "yes" | "no" | null) => void;
+  setAnswers: (a: Answers) => void;
+  entry: Entry;
+  setEntry: (e: Entry) => void;
+  seed: number;
+  reroll: () => void;
+  mood: MoodFilters;
+  setMood: (patch: Partial<MoodFilters>) => void;
   pantryMode: "sample" | "none";
   setPantryMode: (m: "sample" | "none") => void;
   pantry: PantryItem[];
@@ -25,6 +33,9 @@ type Session = {
   saved: RecipeSummary[] | undefined;
   savedError: string | null;
 };
+
+// Which of the three ways in the person picked ("tonight" = none yet).
+export type Entry = "tonight" | "surprise" | "have" | "mood";
 
 const Ctx = createContext<Session | null>(null);
 
@@ -38,9 +49,14 @@ export function IdeasSession({ children }: { children: ReactNode }) {
   const { store } = useKitchen();
   // Read-only: the prototype lists the family's real recipes and never writes.
   const { data: saved, error: savedError } = useLoad(() => store.listRecipes(), [store]);
-  const [moment, setMomentState] = useState<Moment>(() => ({ today: localToday(), weather: null, minutes: null, equipment: [], people: null }));
+  const [moment, setMomentState] = useState<Moment>(() => ({ today: localToday(), weather: null, minutes: null, equipment: [], people: null, kids: false, weatherNote: null }));
   const [answers, setAnswers] = useState<Answers>({});
-  const [pantryMode, setPantryMode] = useState<"sample" | "none">("sample");
+  const [mood, setMoodState] = useState<MoodFilters>(NO_MOOD);
+  const [entry, setEntry] = useState<Entry>("tonight");
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6) + 1);
+  // Pantry isn't connected for real, so Kitchen starts by knowing nothing.
+  // The sample Pantry is a demo the person has to switch on.
+  const [pantryMode, setPantryMode] = useState<"sample" | "none">("none");
   const [thread, setThread] = useState<{ ask: string; reply: Reply }[]>([]);
   const pantry = useMemo(() => (pantryMode === "sample" ? samplePantry(moment.today) : []), [pantryMode, moment.today]);
 
@@ -53,6 +69,11 @@ export function IdeasSession({ children }: { children: ReactNode }) {
       if (v === null) delete next[key]; else next[key] = v;
       return next;
     }),
+    setAnswers,
+    entry, setEntry,
+    seed, reroll: () => setSeed((n) => n + 7919),
+    mood,
+    setMood: (patch) => setMoodState((m) => ({ ...m, ...patch })),
     pantryMode, setPantryMode, pantry,
     thread,
     ask: (text) => {
@@ -62,7 +83,9 @@ export function IdeasSession({ children }: { children: ReactNode }) {
       const reply = simulateReply(q, SAMPLE_IDEAS, saved ?? [], moment.today, previous);
       // What the person said becomes part of the moment: "It's hot" sets the
       // weather, "I have black beans" answers that pantry question.
-      if (Object.keys(reply.moment).length) setMomentState((m) => ({ ...m, ...reply.moment }));
+      if (Object.keys(reply.moment).length) {
+        setMomentState((m) => ({ ...m, ...reply.moment, ...(reply.moment.weather ? { weatherNote: null } : {}) }));
+      }
       if (Object.keys(reply.answers).length) setAnswers((a) => ({ ...a, ...reply.answers }));
       setThread((t) => [...t, { ask: q, reply }]);
     },

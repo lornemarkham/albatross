@@ -73,3 +73,32 @@ export const WEATHER_LABEL: Record<Weather, string> = {
   cold: "Chilly",
   rainy: "Rainy",
 };
+
+// Opt-in local weather. Only runs when the person taps "Check the weather";
+// their position is rounded to ~10 km and goes only to Open-Meteo (free, no
+// key, no account). Nothing is stored.
+export type WeatherReading = { tempC: number; code: number };
+
+// WMO weather codes (Open-Meteo): 51–67 drizzle/rain, 71–77 snow, 80–86
+// showers, 95–99 thunder.
+export function weatherFromReading({ tempC, code }: WeatherReading): { weather: Weather; note: string } {
+  const snow = (code >= 71 && code <= 77) || code === 85 || code === 86;
+  const wet = (code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95;
+  const weather: Weather = snow || tempC <= 8 ? "cold" : wet ? "rainy" : tempC >= 25 ? "hot" : "mild";
+  const sky = snow ? "snow" : wet ? "rain" : code <= 1 ? "clear" : code <= 3 ? "cloudy" : code <= 48 ? "fog" : "";
+  return { weather, note: `${Math.round(tempC)}°C${sky ? `, ${sky}` : ""} nearby · Open-Meteo` };
+}
+
+export async function fetchLocalWeather(): Promise<WeatherReading> {
+  const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+    if (!navigator.geolocation) reject(new Error("This browser can't share a location."));
+    else navigator.geolocation.getCurrentPosition(resolve, () => reject(new Error("Location wasn't shared, so Kitchen can't look up the weather.")), { maximumAge: 30 * 60_000, timeout: 10_000 });
+  });
+  const round = (n: number) => Math.round(n * 10) / 10;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${round(pos.coords.latitude)}&longitude=${round(pos.coords.longitude)}&current=temperature_2m,weather_code&timezone=auto`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Couldn't reach the weather service.");
+  const j = await res.json() as { current?: { temperature_2m?: number; weather_code?: number } };
+  if (typeof j.current?.temperature_2m !== "number") throw new Error("The weather service didn't answer.");
+  return { tempC: j.current.temperature_2m, code: j.current.weather_code ?? 0 };
+}
