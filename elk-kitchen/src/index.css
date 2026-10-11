@@ -6,8 +6,20 @@
   --color-sage: #6b7f5a;
   --color-bark: #4a3f35;
   --color-cream: #fffdf9;
+
+  /* "What should we cook?" prototype (src/prototype) */
+  --color-tomato: #c8553d;
+  --color-saffron: #e9a23b;
+  --color-cocoa: #3d2c22;
+  --color-butter: #fff4dc;
+  --color-leaf: #4f772d;
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, ui-serif, serif;
 }
 
 body {
   @apply bg-parchment text-bark antialiased;
 }
+
+/* Prototype: horizontal chip rows scroll without a visible bar on touch. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

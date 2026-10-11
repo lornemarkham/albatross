@@ -16,6 +16,10 @@ npm run typecheck
 npm run build
 ```
 
+**Prototype:** a "What should we cook today?" home is at `/ideas` in
+`npm run dev` only (read-only, not in production builds). See
+[`docs/prototypes/WHAT-SHOULD-WE-COOK.md`](docs/prototypes/WHAT-SHOULD-WE-COOK.md).
+
 ## Where recipes are saved
 
 | Situation | Saved in |
