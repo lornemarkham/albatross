@@ -58,13 +58,22 @@ Sign-in is the same email link as Inventory. There are no passwords.
 5. Vercel project `elk-kitchen` → Settings → Environment Variables (Production):
    `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Use the same **publishable**
    values as the `elk-inventory` project, never a secret or `service_role` key.
-   Then redeploy.
+   Then redeploy. The values are baked in at build time, so an existing
+   deployment keeps running on this device only until it's rebuilt.
+   Builds from git need **Settings → Build and Deployment → Root Directory**
+   set to `elk-kitchen` (this app lives in a subdirectory of the `albatross`
+   repo); with the default `.` they fail with `vite: command not found`.
+   Deploying with `vercel --prod` from this directory works either way.
 6. Check: run this in the SQL Editor; every row should mention
    `elk_is_family_member`:
 
    ```sql
    SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE tablename LIKE 'kitchen_%';
    ```
+
+   Opening ELK Kitchen should now show a sign-in screen, not the recipe list.
+   If it goes straight to recipes with "Saved on this device only", the
+   deployment was built without the Supabase variables.
 
    Then sign in from a private window with a throwaway email. You should see
    "not on the family list". Delete that user afterwards.
