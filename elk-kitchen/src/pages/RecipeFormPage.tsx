@@ -4,7 +4,7 @@ import { inputClass, labelClass, primaryButton, secondaryButton } from "../compo
 import { useKitchen } from "../context/KitchenContext";
 import { parseOptionalNumber, parseTags } from "../lib/recipeModel";
 import { generateSuggestedTags } from "../lib/suggestedTags";
-import { clearDraft, readDraft, type PhotoDraft } from "../lib/capture/recipeCapture";
+import { clearDraft, readDraft, withReadTags, type PhotoDraft } from "../lib/capture/recipeCapture";
 import type { Recipe, RecipeInput } from "../types/recipe";
 
 type Form = {
@@ -105,6 +105,7 @@ export function RecipeFormPage() {
     let input: RecipeInput;
     try {
       input = toInput(values);
+      if (photo) input = withReadTags(input, photo.draft.suggestedTags);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       return;

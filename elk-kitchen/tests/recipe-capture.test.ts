@@ -2,7 +2,7 @@
 // form draft (never saved directly).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractRecipe, parseExtracted, toRecipeDraft, type ExtractedRecipe } from "../src/lib/capture/recipeCapture";
+import { extractRecipe, parseExtracted, toRecipeDraft, withReadTags, type ExtractedRecipe } from "../src/lib/capture/recipeCapture";
 
 const CARD: ExtractedRecipe = {
   title: "Gran's Scones", servings: "8", prepTime: null, cookTime: "15 min", source: "Gran",
@@ -77,4 +77,11 @@ test("several pages are shrunk until they fit in one request, or refused", async
   assert.ok(pages.reduce((n, p) => n + p.base64.length, 0) <= MAX_TOTAL_CHARS);
   assert.deepEqual([...new Set(edges)], [1800, 1400]);
   await assert.rejects(preparePhotos(Array(6).fill(new Blob()), async () => ({ base64: "A".repeat(1_000_000), mediaType: "image/jpeg" })), /too large/);
+});
+
+test("saving a photo-read recipe keeps the reader's tag suggestions with the keyword ones", () => {
+  const d = toRecipeDraft(CARD, "Lorne");
+  const saved = withReadTags({ ...d, suggestedTags: ["fresh", "baking"] }, d.suggestedTags);
+  assert.deepEqual(saved.suggestedTags, ["baking", "fresh"]);
+  assert.deepEqual(saved.tags, []);
 });

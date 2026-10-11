@@ -83,6 +83,11 @@ export function toRecipeDraft(x: ExtractedRecipe, capturedBy: string): RecipeInp
   };
 }
 
+/** On save, the tags the reader suggested from the card are kept as suggestions alongside the keyword ones. */
+export function withReadTags(input: RecipeInput, read: string[]): RecipeInput {
+  return { ...input, suggestedTags: [...new Set([...read, ...input.suggestedTags])] };
+}
+
 // The reader accepts ~4 MB of photos per request; stay under it with room to spare.
 export const MAX_TOTAL_CHARS = 3_500_000;
 
