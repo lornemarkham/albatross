@@ -35,10 +35,12 @@ no OpenAI key and needs none.
 
 ## ELK Pantry (`/pantry`, recipe pages, `/ideas`)
 
-Read-only. Kitchen reads Inventory's `inventory_items` (domain
+Read-only for stock. Kitchen reads Inventory's `inventory_items` (domain
 `food-storage`) and `stock_lots` with the signed-in person's token, so
-Inventory's family-only policies decide access. Nothing is copied or
-written. Each ingredient line is **have** (Pantry has some), **missing**
+Inventory's family-only policies decide access. Nothing is copied. The one
+write: on a recipe, the person can tick missing ingredients and add them to
+Pantry's shared shopping list (`pantry_shopping_add`, from Inventory's
+`supabase-pantry.sql`; duplicates already on the list are skipped). Each ingredient line is **have** (Pantry has some), **missing**
 (Pantry tracks it and shows none left) or **unknown** (Pantry has no record —
 never treated as missing). Pantry counts packages, not amounts.
 

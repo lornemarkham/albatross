@@ -2,6 +2,8 @@
 // elk-inventory); Kitchen only reads the same rows Inventory's Pantry screen
 // shows, with the signed-in person's own token, so the family-only rules
 // there decide who sees anything. Nothing here writes, copies or caches stock.
+// The one write is adding to Pantry's shopping list, through Inventory's own
+// pantry_shopping_add (which skips anything already on the list).
 //
 // The pantry is whatever the family has entered, so a name missing from it
 // means "Pantry doesn't know", never "you don't have it" (see pantryCheck.ts).
@@ -57,4 +59,17 @@ export async function loadPantry(client: SupabaseClient): Promise<PantryLoad> {
     if (r.error) return isMissingTable(r.error) ? { status: "not-set-up" } : { status: "error", error: r.error.message };
   }
   return { status: "ready", items: summarizePantry(items.data as ItemRow[], lots.data as LotRow[]) };
+}
+
+export type ShoppingAdd = { ok: true; added: number } | { ok: false; error: string };
+
+export async function addToShoppingList(client: SupabaseClient, names: string[], recipeTitle: string): Promise<ShoppingAdd> {
+  const { data, error } = await client.rpc("pantry_shopping_add", {
+    p_names: names, p_note: recipeTitle.trim() ? `for ${recipeTitle.trim()}`.slice(0, 500) : null, p_source: "recipe",
+  });
+  if (error) {
+    // PGRST202: Inventory's database doesn't have the shopping list yet.
+    return { ok: false, error: error.code === "PGRST202" ? "The shopping list isn't switched on in ELK Pantry yet." : error.message };
+  }
+  return { ok: true, added: data as number };
 }

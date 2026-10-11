@@ -104,7 +104,7 @@ export function RecipeDetailPage() {
 
         <dl className="mt-6 space-y-6">
           <Field label="Ingredients" text={recipe.ingredients} />
-          {!removed && <PantryCheck ingredients={recipe.ingredients} />}
+          {!removed && <PantryCheck ingredients={recipe.ingredients} title={recipe.title} />}
           <Field label="Method" text={recipe.instructions} />
           <Field label="Notes" text={recipe.notes} />
           {recipe.approxCalories != null && <Field label="Approx calories" text={String(recipe.approxCalories)} />}

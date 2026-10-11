@@ -299,7 +299,7 @@ These safety properties already exist in shared recipes (`supabase/kitchen.sql`,
 | Q6 | **How do substitutions change nutrition?** | Undecided. Substitutions are free text on cooking entries. |
 | Q7 | **How are pantry deductions confirmed?** | Kitchen's README plans to call Inventory's `pantry_*` functions, referencing a cooking-entry id. There's no confirmation design yet. |
 | Q8 | **Planned meals or spontaneous suggestions?** | Undecided. Inventory's vision text mentions "meal planning" under Kitchen. |
-| Q9 | **Who owns the shopping list?** | It isn't built and has no owner. Pantry has a "Running low" list driven by `lowStockAt`. |
+| Q9 | **Who owns the shopping list?** | **Decided 2026-10-11 (owner's family-readiness brief):** Pantry owns it — `pantry_shopping_items` in Inventory's `supabase-pantry.sql`. Kitchen only adds a recipe's missing ingredients through `pantry_shopping_add`, which the person ticks first; it never reads or changes stock. |
 | Q10 | **Where are the boundaries on recipe import and copyright?** | Undecided. Imports today are the household's own recipes only. |
 | Q11 | **How do future Health integration and privacy work?** | Future scope. Undecided. |
 | Q12 | **Do Kitchen and Pantry share one interface?** | Today they're separate apps (Kitchen; Pantry at `/pantry` in ELK Inventory) that share one Supabase project and one family list. |

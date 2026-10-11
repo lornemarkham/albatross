@@ -3,7 +3,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkRecipe, ingredientName } from "../src/lib/pantryCheck";
-import { summarizePantry, type PantryItem } from "../src/lib/pantry";
+import { addToShoppingList, summarizePantry, type PantryItem } from "../src/lib/pantry";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const p = (name: string, onHand: number, extra: Partial<PantryItem> = {}): PantryItem =>
   ({ name, onHand, unit: "items", bestBefore: null, location: "", ...extra });
@@ -57,4 +58,23 @@ test("on-hand follows Inventory: batches are the truth once a product has any", 
     { name: "Oats", onHand: 3, unit: "items", bestBefore: null, location: "" },
     { name: "Lentils", onHand: 0, unit: "items", bestBefore: null, location: "" },
   ]);
+});
+
+// ── Adding a recipe's missing ingredients to Pantry's shopping list ─────────────
+const fakeClient = (reply: { data?: unknown; error?: { code?: string; message: string } | null }) => {
+  const calls: { fn: string; args: Record<string, unknown> }[] = [];
+  const client = { rpc: async (fn: string, args: Record<string, unknown>) => { calls.push({ fn, args }); return { data: reply.data ?? null, error: reply.error ?? null }; } };
+  return { client: client as unknown as SupabaseClient, calls };
+};
+
+test("shopping: sends the names through pantry_shopping_add, marked as from this recipe", async () => {
+  const { client, calls } = fakeClient({ data: 2 });
+  const r = await addToShoppingList(client, ["Basmati Rice", "fresh basil"], " Green curry ");
+  assert.deepEqual(r, { ok: true, added: 2 });
+  assert.deepEqual(calls, [{ fn: "pantry_shopping_add", args: { p_names: ["Basmati Rice", "fresh basil"], p_note: "for Green curry", p_source: "recipe" } }]);
+});
+
+test("shopping: says plainly when Pantry's database doesn't have the list yet", async () => {
+  const { client } = fakeClient({ error: { code: "PGRST202", message: "Could not find the function" } });
+  assert.deepEqual(await addToShoppingList(client, ["eggs"], "Cake"), { ok: false, error: "The shopping list isn't switched on in ELK Pantry yet." });
 });
