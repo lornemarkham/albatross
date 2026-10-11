@@ -5,6 +5,9 @@ cooking history (each time someone actually made it — what they used,
 substitutions, the family's reaction, what to change next time). Favourites
 are per person.
 
+**Product authority:** read [`docs/KITCHEN-PRODUCT-DOCTRINE.md`](docs/KITCHEN-PRODUCT-DOCTRINE.md)
+before changing how Kitchen behaves.
+
 ```
 npm install
 npm run dev        # http://localhost:5173
