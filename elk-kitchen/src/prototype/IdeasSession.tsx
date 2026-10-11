@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useKitchen } from "../context/KitchenContext";
 import { useLoad } from "../lib/useLoad";
+import { usePantry } from "../lib/usePantry";
 import type { RecipeSummary } from "../types/recipe";
 import { localToday } from "./ideas/context";
 import { simulateReply, type Reply } from "./ideas/conversation";
@@ -23,8 +24,11 @@ type Session = {
   reroll: () => void;
   mood: MoodFilters;
   setMood: (patch: Partial<MoodFilters>) => void;
-  pantryMode: "sample" | "none";
-  setPantryMode: (m: "sample" | "none") => void;
+  // "pantry": the family's real ELK Pantry (read-only). "sample": a pretend
+  // one, offered only when the real one isn't available.
+  pantryMode: PantryMode;
+  setPantryMode: (m: PantryMode) => void;
+  realPantry: "loading" | "ready" | "unavailable";
   pantry: PantryItem[];
   thread: { ask: string; reply: Reply }[];
   // Ask the (simulated) Kitchen something; the reply joins the thread.
@@ -33,6 +37,8 @@ type Session = {
   saved: RecipeSummary[] | undefined;
   savedError: string | null;
 };
+
+export type PantryMode = "pantry" | "sample" | "none";
 
 // Which of the three ways in the person picked ("tonight" = none yet).
 export type Entry = "tonight" | "surprise" | "have" | "mood";
@@ -54,11 +60,17 @@ export function IdeasSession({ children }: { children: ReactNode }) {
   const [mood, setMoodState] = useState<MoodFilters>(NO_MOOD);
   const [entry, setEntry] = useState<Entry>("tonight");
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e6) + 1);
-  // Pantry isn't connected for real, so Kitchen starts by knowing nothing.
-  // The sample Pantry is a demo the person has to switch on.
-  const [pantryMode, setPantryMode] = useState<"sample" | "none">("none");
+  // The real ELK Pantry when the family account has one; otherwise Kitchen
+  // starts by knowing nothing (the sample Pantry is a demo to switch on).
+  const real = usePantry();
+  const realItems = real.pantry && real.pantry !== "off" && real.pantry.status === "ready" ? real.pantry.items : null;
+  const realPantry = realItems ? "ready" : real.pantry === undefined && !real.error ? "loading" : "unavailable";
+  const [pantryMode, setPantryMode] = useState<PantryMode>("none");
+  useEffect(() => { if (realItems) setPantryMode((m) => (m === "none" ? "pantry" : m)); }, [realItems]);
   const [thread, setThread] = useState<{ ask: string; reply: Reply }[]>([]);
-  const pantry = useMemo(() => (pantryMode === "sample" ? samplePantry(moment.today) : []), [pantryMode, moment.today]);
+  const pantry = useMemo(
+    () => (pantryMode === "pantry" ? realItems ?? [] : pantryMode === "sample" ? samplePantry(moment.today) : []),
+    [pantryMode, realItems, moment.today]);
 
   const value: Session = {
     moment,
@@ -74,7 +86,7 @@ export function IdeasSession({ children }: { children: ReactNode }) {
     seed, reroll: () => setSeed((n) => n + 7919),
     mood,
     setMood: (patch) => setMoodState((m) => ({ ...m, ...patch })),
-    pantryMode, setPantryMode, pantry,
+    pantryMode, setPantryMode, realPantry, pantry,
     thread,
     ask: (text) => {
       const q = text.trim();

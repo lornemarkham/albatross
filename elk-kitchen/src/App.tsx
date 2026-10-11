@@ -6,12 +6,13 @@ import { RecipeDetailPage } from "./pages/RecipeDetailPage";
 import { RecipeFormPage } from "./pages/RecipeFormPage";
 import { CookEntryPage } from "./pages/CookEntryPage";
 import { DataPage } from "./pages/DataPage";
+import { PhotoCapturePage } from "./pages/PhotoCapturePage";
+import { PantryPage } from "./pages/PantryPage";
 
-// "What should we cook?" prototype (src/prototype). Only in `npm run dev`, or
-// a build made with VITE_KITCHEN_PROTOTYPE=1 — never in a normal production
-// build. It reads recipes and writes nothing.
-const SHOW_IDEAS_PROTOTYPE = import.meta.env.DEV || import.meta.env.VITE_KITCHEN_PROTOTYPE === "1";
-const IdeasPrototype = SHOW_IDEAS_PROTOTYPE ? lazy(() => import("./prototype/IdeasRoutes")) : null;
+// "What should we cook?" (src/prototype — the name is historical). Reads the
+// family's recipes and ELK Pantry, writes nothing; its example ideas and
+// keyword replies are labelled as such on the page.
+const IdeasPrototype = lazy(() => import("./prototype/IdeasRoutes"));
 
 function App() {
   return (
@@ -21,13 +22,13 @@ function App() {
           <Routes>
             <Route path="/" element={<RecipeListPage />} />
             <Route path="/add" element={<RecipeFormPage />} />
+            <Route path="/add/photo" element={<PhotoCapturePage />} />
+            <Route path="/pantry" element={<PantryPage />} />
             <Route path="/recipe/:id" element={<RecipeDetailPage />} />
             <Route path="/recipe/:id/edit" element={<RecipeFormPage />} />
             <Route path="/recipe/:id/cook" element={<CookEntryPage />} />
             <Route path="/data" element={<DataPage />} />
-            {IdeasPrototype && (
-              <Route path="/ideas/*" element={<Suspense fallback={null}><IdeasPrototype /></Suspense>} />
-            )}
+            <Route path="/ideas/*" element={<Suspense fallback={null}><IdeasPrototype /></Suspense>} />
           </Routes>
         </KitchenProvider>
       </div>

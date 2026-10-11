@@ -1,3 +1,6 @@
 {
-  "rewrites": [{ "source": "/((?!assets/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/extract", "destination": "https://elk-inventory.vercel.app/api/extract" },
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
 }

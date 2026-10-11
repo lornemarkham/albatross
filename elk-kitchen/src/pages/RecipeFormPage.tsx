@@ -1,9 +1,10 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { inputClass, labelClass, primaryButton, secondaryButton } from "../components/ui";
 import { useKitchen } from "../context/KitchenContext";
 import { parseOptionalNumber, parseTags } from "../lib/recipeModel";
 import { generateSuggestedTags } from "../lib/suggestedTags";
+import { clearDraft, readDraft, type PhotoDraft } from "../lib/capture/recipeCapture";
 import type { Recipe, RecipeInput } from "../types/recipe";
 
 type Form = {
@@ -52,9 +53,18 @@ export function RecipeFormPage() {
   const editing = id !== undefined;
   const { store, myName } = useKitchen();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
 
   const blank: Form = { title: "", authorName: myName, ingredients: "", instructions: "", notes: "", tagsRaw: "", approxCalories: "" };
-  const [form, setForm] = useState<Form>(blank);
+  // A recipe read from photos, waiting for a person to check it (never saved until they do).
+  const [photo] = useState<PhotoDraft | null>(() =>
+    editing || params.get("from") !== "photo" ? null : ((location.state as PhotoDraft | null) ?? readDraft(window.sessionStorage)));
+  const [form, setForm] = useState<Form>(() => {
+    if (!photo) return blank;
+    const d = photo.draft;
+    return { ...blank, title: d.title, authorName: d.authorName, ingredients: d.ingredients, instructions: d.instructions, notes: d.notes };
+  });
   const [initial, setInitial] = useState<Form>(blank);
   // The version this edit started from; the save only lands if it's still current.
   const [baseVersion, setBaseVersion] = useState(0);
@@ -103,6 +113,7 @@ export function RecipeFormPage() {
     try {
       if (!editing) {
         const recipe = await store.createRecipe(input);
+        clearDraft(window.sessionStorage);
         setInitial(values);
         navigate(`/recipe/${encodeURIComponent(recipe.id)}`, { replace: true });
         return;
@@ -128,7 +139,8 @@ export function RecipeFormPage() {
   }
 
   function cancel() {
-    if (dirty && !window.confirm("Discard your unsaved changes?")) return;
+    if (dirty && !window.confirm(photo ? "Discard this recipe? What was read from the photos will be lost." : "Discard your unsaved changes?")) return;
+    clearDraft(window.sessionStorage);
     setInitial(form); // so the unload warning doesn't fire on the way out
     navigate(editing ? `/recipe/${encodeURIComponent(id)}` : "/");
   }
@@ -163,10 +175,15 @@ export function RecipeFormPage() {
     <div className="mx-auto max-w-2xl px-4 py-8">
       <button type="button" onClick={cancel} className="text-sm font-medium text-sage hover:underline">← Cancel</button>
 
-      <h1 className="mt-4 text-2xl font-bold text-bark">{editing ? "Edit recipe" : "Add recipe"}</h1>
-      <p className="mt-1 text-sm text-bark/70">
-        The recipe itself — what you plan to make. Record each time you cook it separately, from the recipe page.
-      </p>
+      <h1 className="mt-4 text-2xl font-bold text-bark">{editing ? "Edit recipe" : photo ? "Check the recipe" : "Add recipe"}</h1>
+      {photo ? (
+        <PhotoReview photo={photo} tagsRaw={form.tagsRaw} addTag={(t) => setForm((f) => ({ ...f, tagsRaw: parseTags(f.tagsRaw).concat(t).join(", ") }))} />
+      ) : (
+        <p className="mt-1 text-sm text-bark/70">
+          The recipe itself — what you plan to make. Record each time you cook it separately, from the recipe page.
+          {!editing && <> Have it on paper? <Link to="/add/photo" className="font-semibold text-sage underline">Photograph it instead</Link>.</>}
+        </p>
+      )}
 
       {loadState === "loading" ? (
         <p className="mt-8 text-bark/60">{error ?? "Loading…"}</p>
@@ -242,6 +259,40 @@ export function RecipeFormPage() {
             </button>
           </div>
         </form>
+      )}
+    </div>
+  );
+}
+
+// What the AI read, and what it couldn't — shown above the filled-in form.
+function PhotoReview({ photo, tagsRaw, addTag }: { photo: PhotoDraft; tagsRaw: string; addTag: (t: string) => void }) {
+  const chosen = parseTags(tagsRaw);
+  const offered = photo.draft.suggestedTags.filter((t) => !chosen.includes(t));
+  return (
+    <div className="mt-3 space-y-3">
+      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+        <p className="font-semibold">
+          Read by AI from {photo.pages === 1 ? "your photo" : `${photo.pages} photos`}. Not saved yet.
+        </p>
+        <p className="mt-1">Check each line against the card and fix anything that's wrong, then press <strong>Save recipe</strong>.</p>
+        {photo.unclear.length > 0 ? (
+          <>
+            <p className="mt-3 font-semibold">⚠ It couldn't read {photo.unclear.length === 1 ? "this" : `these ${photo.unclear.length}`} clearly:</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-5">
+              {photo.unclear.map((u, i) => <li key={i}>{u}</li>)}
+            </ul>
+          </>
+        ) : (
+          <p className="mt-2 text-amber-900/80">It didn't flag anything as hard to read — still worth a quick check.</p>
+        )}
+      </div>
+      {offered.length > 0 && (
+        <p className="text-sm text-bark/70">
+          Suggested tags:{" "}
+          {offered.map((t) => (
+            <button key={t} type="button" onClick={() => addTag(t)} className="mr-1.5 mt-1 rounded-full bg-cream px-2.5 py-0.5 ring-1 ring-clay hover:bg-clay/30">+ {t}</button>
+          ))}
+        </p>
       )}
     </div>
   );

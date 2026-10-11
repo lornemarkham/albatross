@@ -132,9 +132,11 @@ export function PantryCheck({ fit, factor }: { fit: PantryFit; factor: number })
       <div className={`rounded-2xl px-4 py-3 ${fit.total > 0 && fit.have === fit.total ? "bg-leaf/10 text-leaf" : "bg-saffron/15 text-cocoa"}`}>
         <p className="font-semibold">{fitLine(fit)}</p>
         <p className="mt-0.5 text-xs opacity-80">
-          {pantryMode === "sample"
-            ? "Checked against the sample Pantry. Pantry counts packages, not amounts, so Kitchen can't tell whether 1 bag is enough."
-            : "Pantry isn't connected, so Kitchen asks instead of guessing."}
+          {pantryMode === "pantry"
+            ? "Checked against your ELK Pantry. It counts packages, not amounts, and only knows what's been entered — anything else, Kitchen asks."
+            : pantryMode === "sample"
+            ? "Checked against the pretend Pantry. Pantry counts packages, not amounts, so Kitchen can't tell whether 1 bag is enough."
+            : "Not using ELK Pantry, so Kitchen asks instead of guessing."}
         </p>
       </div>
       <ul className="mt-3 divide-y divide-cocoa/10">
@@ -245,7 +247,7 @@ function Fact({ label, value }: { label: string; value: string }) {
 export function PrototypeRibbon() {
   return (
     <div className="bg-cocoa px-4 py-2 text-center text-xs text-butter/90">
-      <strong className="font-semibold text-butter">Prototype.</strong> Example ideas are hand-written, not your recipes. Nothing here is saved.{" "}
+      Example ideas are hand-written, not family recipes, and “just say it” uses simple keyword rules, not AI. Nothing on this page is saved.{" "}
       <a href="/ideas#whats-real" className="underline decoration-butter/40 underline-offset-2 hover:decoration-butter">What's real?</a>
     </div>
   );

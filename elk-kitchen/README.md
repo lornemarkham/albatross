@@ -16,10 +16,31 @@ npm run typecheck
 npm run build
 ```
 
-**Prototype:** a "What should we cook tonight?" home is at `/ideas`
-(read-only). It's in `npm run dev`, and in production only when deployed with
-`--build-env VITE_KITCHEN_PROTOTYPE=1`. See
+**What should we cook?** is at `/ideas`, in every build (read-only; its
+example ideas and keyword replies are labelled as such on the page). See
 [`docs/prototypes/WHAT-SHOULD-WE-COOK.md`](docs/prototypes/WHAT-SHOULD-WE-COOK.md).
+
+## Photograph a recipe (`/add/photo`)
+
+Family members only. Photos (up to 6 pages of one recipe, shrunk in the
+browser to fit one ~3.5 MB request) go to **ELK Inventory's** `/api/extract`
+with `kind: "recipe"`, reached through the same-origin rewrite in
+`vercel.json` (`vite.config.ts` proxies it in dev). That endpoint holds the
+OpenAI key, checks the sign-in token against `elk_is_family_member()` before
+touching it, and streams its answer so slow multi-page reads survive Vercel
+Edge's 25 s limit. The answer fills in the recipe form, with anything the
+model couldn't read listed above it; nothing is saved until the person
+presses Save. Photos are not stored anywhere. Kitchen's Vercel project has
+no OpenAI key and needs none.
+
+## ELK Pantry (`/pantry`, recipe pages, `/ideas`)
+
+Read-only. Kitchen reads Inventory's `inventory_items` (domain
+`food-storage`) and `stock_lots` with the signed-in person's token, so
+Inventory's family-only policies decide access. Nothing is copied or
+written. Each ingredient line is **have** (Pantry has some), **missing**
+(Pantry tracks it and shows none left) or **unknown** (Pantry has no record —
+never treated as missing). Pantry counts packages, not amounts.
 
 ## Where recipes are saved
 
@@ -69,8 +90,11 @@ Sign-in is the same email link as Inventory. There are no passwords.
    set to `elk-kitchen` (this app lives in a subdirectory of the `albatross`
    repo); with the default `.` they fail with `vite: command not found`.
    Deploying with `vercel --prod` from this directory works either way.
-6. Check: run this in the SQL Editor; every row should mention
-   `elk_is_family_member`:
+6. Check behaviour: run `supabase/kitchen-verify.sql` in the SQL Editor. It
+   acts as a family member, a signed-in stranger and a signed-out caller,
+   tries real reads and writes, undoes them, and shows PASS/FAIL per check.
+   Every row should be PASS. And the policies themselves — every row should
+   mention `elk_is_family_member`:
 
    ```sql
    SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE tablename LIKE 'kitchen_%';
@@ -111,7 +135,10 @@ What import does:
 
 ## Safety rules (enforced in `supabase/kitchen.sql`)
 
-- Recipes can't be deleted through the app or the API.
+- Recipes can't be destroyed through the app or the API. **Delete** (with a
+  confirmation) sets `removed_at`: the recipe leaves everyone's book, keeps
+  its history and stays in backups, and can be restored from **Recently
+  removed**. Who and when are set by the database.
 - Every edit must name the version it started from. If someone else saved
   first, nothing is written. The editor keeps what you typed, shows what they
   changed, and lets you save both (yours only replaces fields you both
@@ -121,12 +148,12 @@ What import does:
   recorded, after a confirmation.
 - There's no Reset button. The old one deleted everything without asking.
 
-## Boundary with ELK Inventory (not built yet)
+## Boundary with ELK Inventory
 
 Kitchen owns recipes, cooking history, substitutions, reactions,
 improvements and favourites. Inventory owns physical stock: quantities,
-locations, lots and consumption movements. Kitchen never reads or writes
-Inventory's tables. When "I cooked this" should use up pantry stock, the
+locations, lots and consumption movements. Kitchen only *reads* Inventory's
+pantry tables (above) and never writes them. When "I cooked this" should use up pantry stock, the
 plan is for Kitchen to call Inventory's own `pantry_*` functions
 (oldest-first use), referencing a cooking entry id, rather than keeping any
 stock records of its own.

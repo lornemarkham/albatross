@@ -176,11 +176,11 @@ function SurpriseIdeas() {
 }
 
 function HavePanel() {
-  const { answers, setAnswers, pantryMode, setPantryMode } = useIdeas();
+  const { answers, setAnswers, pantryMode, setPantryMode, realPantry } = useIdeas();
   const ctx = useCtx();
   const shelf = useMemo(() => haveShelf(ctx), [ctx.saved, ctx.pantry, ctx.answers, ctx.moment]);
   const anyTapped = HAVE_CHIPS.some((c) => chipOn(c, answers));
-  const knowsSomething = anyTapped || pantryMode === "sample" || Object.keys(answers).length > 0;
+  const knowsSomething = anyTapped || pantryMode !== "none" || Object.keys(answers).length > 0;
 
   return (
     <>
@@ -201,14 +201,27 @@ function HavePanel() {
           </div>
         ))}
         <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-cocoa/10 pt-3 text-sm">
-          {pantryMode === "sample" ? (
+          {pantryMode === "pantry" ? (
+            <>
+              <span className="rounded-full bg-leaf/15 px-3 py-1 font-medium text-cocoa">Also using your ELK Pantry</span>
+              <Link to="/pantry" className="text-cocoa/60 underline">What's in it?</Link>
+              <button type="button" className="text-cocoa/60 underline" onClick={() => setPantryMode("none")}>Ignore it</button>
+            </>
+          ) : pantryMode === "sample" ? (
             <>
               <span className="rounded-full bg-saffron/20 px-3 py-1 font-medium text-cocoa">Using a pretend Pantry — not your real cupboard</span>
               <button type="button" className="text-cocoa/60 underline" onClick={() => setPantryMode("none")}>Turn it off</button>
             </>
+          ) : realPantry === "ready" ? (
+            <>
+              <span className="text-cocoa/65">Not using ELK Pantry, so Kitchen only knows what you tap.</span>
+              <button type="button" className="text-tomato underline" onClick={() => setPantryMode("pantry")}>Use ELK Pantry</button>
+            </>
+          ) : realPantry === "loading" ? (
+            <span className="text-cocoa/65">Checking ELK Pantry…</span>
           ) : (
             <>
-              <span className="text-cocoa/65">ELK Pantry isn't connected yet, so Kitchen only knows what you tap.</span>
+              <span className="text-cocoa/65">ELK Pantry isn't available here (it needs the family sign-in), so Kitchen only knows what you tap.</span>
               <button type="button" className="text-tomato underline" onClick={() => setPantryMode("sample")}>Try a pretend Pantry</button>
             </>
           )}
@@ -218,7 +231,7 @@ function HavePanel() {
       {!knowsSomething ? (
         <p className="mt-6 rounded-3xl border border-dashed border-cocoa/20 p-8 text-center text-lg text-cocoa/60">Tap two or three things above and Kitchen will find dinners that use them.</p>
       ) : shelf.samples.length + shelf.saved.length === 0 ? (
-        <p className="mt-6 rounded-3xl bg-butter p-6 text-cocoa/75">None of this prototype's example ideas use those. The real Kitchen would search far more recipes.</p>
+        <p className="mt-6 rounded-3xl bg-butter p-6 text-cocoa/75">Nothing in your recipe book or the example ideas uses those yet.</p>
       ) : (
         <div className="mt-2"><Results shelf={shelf} /></div>
       )}
@@ -311,7 +324,7 @@ function Results({ shelf, serves }: { shelf: Shelf; serves?: number | null }) {
       )}
       {shelf.samples.length > 0 && (
         <>
-          <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-cocoa/55">Example ideas <span className="font-normal normal-case tracking-normal text-cocoa/45">— written for this prototype</span></h3>
+          <h3 className="mt-6 text-sm font-semibold uppercase tracking-wide text-cocoa/55">Example ideas <span className="font-normal normal-case tracking-normal text-cocoa/45">— not family recipes</span></h3>
           <ul className="mt-3 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {shelf.samples.slice(0, 3).map((s) => <li key={s.idea.id}><SampleCard s={s} serves={people} /></li>)}
           </ul>
@@ -363,9 +376,9 @@ function WhatsReal() {
       <div className="rounded-3xl bg-white/70 p-5 ring-1 ring-cocoa/10 sm:p-6">
         <h2 className={`${display} text-2xl text-cocoa`}>What's real on this page</h2>
         <dl className="mt-3 space-y-3">
-          <div><dt className="font-semibold text-leaf">Real</dt><dd>Recipes in your recipe book, favourites and cooking history (read only). Today's date, season and holidays. Weather, if you tap “Check”. What you tap or type. Scaling, cook-along mode and its timers.</dd></div>
-          <div><dt className="font-semibold text-saffron">Simulated</dt><dd>The “Example ideas” are a dozen dishes written by hand for this prototype. “Or just say it” replies come from simple keyword rules, not AI. The pretend Pantry is off unless you switch it on.</dd></div>
-          <div><dt className="font-semibold text-tomato">Not known, so not shown</dt><dd>Your real Pantry, household tastes, and calories, protein or fibre amounts. Nutrition shows only what can be read from an ingredient list. Kitchen asks or leaves it blank rather than guess.</dd></div>
+          <div><dt className="font-semibold text-leaf">Real</dt><dd>Recipes in your family recipe book, favourites and cooking history (read only). ELK Pantry, read-only, when you're signed in to the family account. Today's date, season and holidays. Weather, if you tap “Check”. What you tap or type. Scaling, cook-along mode and its timers.</dd></div>
+          <div><dt className="font-semibold text-saffron">Examples, not family recipes</dt><dd>The “Example ideas” are a dozen ordinary dishes written by hand so there's something to suggest before the recipe book fills up. “Or just say it” replies come from simple keyword rules, not AI. The pretend Pantry only appears when the real one isn't available, and is off unless you switch it on.</dd></div>
+          <div><dt className="font-semibold text-tomato">Not known, so not shown</dt><dd>Anything ELK Pantry hasn't been told about, amounts (Pantry counts packages), household tastes, and calories, protein or fibre amounts. Kitchen asks or leaves it blank rather than guess.</dd></div>
         </dl>
         {PHOTO_CREDITS.length > 0 && (
           <details className="mt-3 text-xs text-cocoa/60">

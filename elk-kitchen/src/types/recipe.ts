@@ -15,6 +15,8 @@ export type Recipe = {
   updatedAt: string;
   // The original browser-only record, kept verbatim when imported.
   legacy?: unknown;
+  // Set when someone used "Delete": hidden from the book, kept, and restorable.
+  removedAt?: string | null;
 };
 
 // One occasion someone made a recipe: what actually happened.

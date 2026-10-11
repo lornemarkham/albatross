@@ -7,6 +7,7 @@
 //   null          not signed in (anon)
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { PGlite } from "@electric-sql/pglite";
 import { supabaseLikeDb, runFile, asUser, addMember, inventoryStubs } from "./supabase-harness";
 
@@ -196,6 +197,23 @@ test("deleting an auth user who wrote recipes and cooking entries still works, a
     "no phantom edit (which would cause false conflicts)");
 });
 
+test("'Delete' hides a recipe (who and when set by the database), keeps it, and can be undone", async () => {
+  await as(LORNE, "INSERT INTO kitchen_recipes (id, title, removed_at, removed_by) VALUES ('oops', 'Oops', '2000-01-01', '" + KATHY + "')");
+  assert.deepEqual(await admin("SELECT removed_at, removed_by FROM kitchen_recipes WHERE id = 'oops'"), [{ removed_at: null, removed_by: null }]);
+
+  await as(KATHY, `UPDATE kitchen_recipes SET removed_at = '2000-01-01', removed_by = '${LORNE}' WHERE id = 'oops'`);
+  const [gone] = await admin<{ removed_at: Date; removed_by: string; version: number }>("SELECT removed_at, removed_by, version FROM kitchen_recipes WHERE id = 'oops'");
+  assert.equal(gone.removed_by, KATHY);
+  assert.ok(gone.removed_at.getFullYear() > 2000, "time comes from the database");
+  assert.equal(gone.version, 2);
+  assert.equal((await admin("SELECT * FROM kitchen_recipe_revisions WHERE recipe_id = 'oops'")).length, 1, "pre-removal version kept");
+  // A stranger still can't see or restore it.
+  assert.deepEqual(await as(STRANGER, "UPDATE kitchen_recipes SET removed_at = NULL WHERE id = 'oops' RETURNING id"), []);
+
+  await as(LORNE, "UPDATE kitchen_recipes SET removed_at = NULL WHERE id = 'oops'");
+  assert.deepEqual(await admin("SELECT removed_at, removed_by FROM kitchen_recipes WHERE id = 'oops'"), [{ removed_at: null, removed_by: null }]);
+});
+
 test("running the SQL again keeps all data and the same rules", async () => {
   const before = await admin("SELECT (SELECT count(*) FROM kitchen_recipes) r, (SELECT count(*) FROM kitchen_cooking_entries) e, (SELECT count(*) FROM kitchen_favourites) f, (SELECT count(*) FROM kitchen_recipe_revisions) v");
   const policies = await admin("SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE tablename LIKE 'kitchen_%' ORDER BY 1, 2");
@@ -203,4 +221,18 @@ test("running the SQL again keeps all data and the same rules", async () => {
   assert.deepEqual(await admin("SELECT (SELECT count(*) FROM kitchen_recipes) r, (SELECT count(*) FROM kitchen_cooking_entries) e, (SELECT count(*) FROM kitchen_favourites) f, (SELECT count(*) FROM kitchen_recipe_revisions) v"), before);
   assert.deepEqual(await admin("SELECT tablename, policyname, qual, with_check FROM pg_policies WHERE tablename LIKE 'kitchen_%' ORDER BY 1, 2"), policies);
   assert.deepEqual(await as(STRANGER, "SELECT * FROM kitchen_recipes"), []);
+});
+
+test("supabase/kitchen-verify.sql passes every check against the real rules, and changes nothing", async () => {
+  await db.exec(`CREATE TABLE IF NOT EXISTS public.stock_lots (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), item_id TEXT);
+    ALTER TABLE public.stock_lots ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS "Family members can view lots" ON public.stock_lots;
+    CREATE POLICY "Family members can view lots" ON public.stock_lots FOR SELECT TO authenticated USING ((SELECT public.elk_is_family_member()));`);
+  const count = () => admin("SELECT (SELECT count(*) FROM kitchen_recipes) r, (SELECT count(*) FROM kitchen_cooking_entries) e, (SELECT count(*) FROM kitchen_recipe_revisions) v");
+  const before = await count();
+  const results = await db.exec(readFileSync("supabase/kitchen-verify.sql", "utf8"));
+  const rows = results[results.length - 1].rows as { result: string; check_name: string; detail: string }[];
+  assert.ok(rows.length >= 18, JSON.stringify(rows));
+  for (const r of rows) assert.equal(r.result, "PASS", `${r.check_name}: ${r.detail}`);
+  assert.deepEqual(await count(), before);
 });

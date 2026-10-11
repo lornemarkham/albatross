@@ -219,3 +219,23 @@ test("import accepts the old app's raw array and rejects anything else clearly",
   // Recipes without an id or title are skipped, not invented.
   assert.equal(parseImportFile(JSON.stringify([{ title: "no id" }, { id: "x" }]), "").recipes.length, 0);
 });
+
+test("Delete hides a recipe but keeps it and its history; Restore brings it back; stale deletes do nothing", async () => {
+  const s = new MemoryStorage();
+  const store = new DeviceRecipeStore(s, clock);
+  const r = await store.createRecipe(soup);
+  await store.addCookingEntry(r.id, { cookedOn: "2026-10-01", cookName: "Lorne", ingredientsUsed: "", substitutions: "", familyReaction: "", improveNextTime: "More salt", notes: "", rating: 8 });
+
+  assert.deepEqual(await store.setRemoved(r.id, 99, true), { ok: false, current: r }, "someone else changed it first");
+  const gone = await store.setRemoved(r.id, r.version, true);
+  assert.ok(gone.ok);
+  assert.ok(!(await store.listRecipes()).some((x) => x.id === r.id));
+  assert.deepEqual((await store.listRemoved()).map((x) => x.id), [r.id]);
+  assert.equal((await store.getRecipe(r.id))?.entries.length, 1, "history kept");
+  assert.ok((await store.exportAll()).recipes.some((x) => x.id === r.id), "still in backups");
+
+  const back = await store.setRemoved(r.id, gone.ok ? gone.recipe.version : 0, false);
+  assert.ok(back.ok);
+  assert.ok((await store.listRecipes()).some((x) => x.id === r.id));
+  assert.deepEqual(await store.listRemoved(), []);
+});

@@ -10,7 +10,7 @@ import { byNewestCook, keysOf, summarize, type RecipeStore, type UpdateResult } 
 type RecipeRow = {
   id: string; title: string; author_name: string; ingredients: string; instructions: string; notes: string;
   tags: string[]; suggested_tags: string[]; approx_calories: number | null; legacy: unknown;
-  version: number; created_at: string; updated_at: string;
+  version: number; created_at: string; updated_at: string; removed_at: string | null;
 };
 type EntryRow = {
   id: string; recipe_id: string; cooked_on: string | null; cook_name: string; ingredients_used: string;
@@ -18,7 +18,7 @@ type EntryRow = {
   rating: number | string | null; created_by: string | null; created_at: string;
 };
 
-const RECIPE_COLS = "id,title,author_name,ingredients,instructions,notes,tags,suggested_tags,approx_calories,legacy,version,created_at,updated_at";
+const RECIPE_COLS = "id,title,author_name,ingredients,instructions,notes,tags,suggested_tags,approx_calories,legacy,version,created_at,updated_at,removed_at";
 const ENTRY_COLS = "id,recipe_id,cooked_on,cook_name,ingredients_used,substitutions,family_reaction,improve_next_time,notes,rating,created_by,created_at";
 
 export const toRecipe = (r: RecipeRow): Recipe => ({
@@ -35,6 +35,7 @@ export const toRecipe = (r: RecipeRow): Recipe => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   ...(r.legacy != null ? { legacy: r.legacy } : {}),
+  removedAt: r.removed_at,
 });
 
 // Writable columns only: id/version/authorship/timestamps are set by the database.
@@ -120,9 +121,15 @@ export class SharedRecipeStore implements RecipeStore {
     return (data?.display_name as string | null) ?? "";
   }
 
-  async listRecipes() {
+  listRecipes() { return this.list(false); }
+  listRemoved() { return this.list(true); }
+
+  private async list(removed: boolean) {
     const [recipes, entries, favs] = await Promise.all([
-      fetchAll<RecipeRow>("load recipes", (a, b) => this.client.from("kitchen_recipes").select(RECIPE_COLS).order("id").range(a, b)),
+      fetchAll<RecipeRow>("load recipes", (a, b) => {
+        const q = this.client.from("kitchen_recipes").select(RECIPE_COLS);
+        return (removed ? q.not("removed_at", "is", null) : q.is("removed_at", null)).order("id").range(a, b);
+      }),
       fetchAll<{ recipe_id: string; cooked_on: string | null }>("load cooking history",
         (a, b) => this.client.from("kitchen_cooking_entries").select("recipe_id,cooked_on").order("id").range(a, b)),
       fetchAll<{ recipe_id: string }>("load favourites",
@@ -164,15 +171,24 @@ export class SharedRecipeStore implements RecipeStore {
     return toRecipe(data as RecipeRow);
   }
 
-  async updateRecipe(id: string, baseVersion: number, input: RecipeInput): Promise<UpdateResult> {
+  updateRecipe(id: string, baseVersion: number, input: RecipeInput): Promise<UpdateResult> {
+    return this.versioned(id, baseVersion, recipeRow(input));
+  }
+
+  private async versioned(id: string, baseVersion: number, patch: Record<string, unknown>): Promise<UpdateResult> {
     const { data, error } = await this.client.from("kitchen_recipes")
-      .update(recipeRow(input)).eq("id", id).eq("version", baseVersion).select(RECIPE_COLS);
+      .update(patch).eq("id", id).eq("version", baseVersion).select(RECIPE_COLS);
     if (error) fail("save the recipe", error);
     const rows = data as RecipeRow[];
     if (rows.length === 1) return { ok: true, recipe: toRecipe(rows[0]) };
     const now = await this.client.from("kitchen_recipes").select(RECIPE_COLS).eq("id", id).maybeSingle();
     if (now.error) fail("check the recipe", now.error);
     return { ok: false, current: now.data ? toRecipe(now.data as RecipeRow) : null };
+  }
+
+  async setRemoved(id: string, baseVersion: number, removed: boolean): Promise<UpdateResult> {
+    // The database replaces this time with its own, and records who did it.
+    return this.versioned(id, baseVersion, { removed_at: removed ? new Date().toISOString() : null });
   }
 
   async setFavourite(recipeId: string, on: boolean) {

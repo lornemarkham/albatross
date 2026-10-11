@@ -17,7 +17,8 @@
 --
 -- Safety rules enforced here, not just in the app:
 --   • only family members can read or write anything
---   • recipes cannot be deleted through the API (owner can, from the SQL Editor)
+--   • recipes cannot be deleted through the API (owner can, from the SQL Editor);
+--     "Delete" in the app sets removed_at, which hides the recipe and can be undone
 --   • every recipe edit bumps `version` and saves the old row as a revision,
 --     so an edit can't silently destroy a recipe
 --   • cooking history is append-only; people can remove only entries they recorded
@@ -63,6 +64,9 @@ CREATE TABLE IF NOT EXISTS public.kitchen_recipes (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 COMMENT ON TABLE public.kitchen_recipes IS 'elk-kitchen: shared family recipes.';
+-- v2: "Delete" in the app hides a recipe (removed_at) instead of destroying it.
+ALTER TABLE public.kitchen_recipes ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ;
+ALTER TABLE public.kitchen_recipes ADD COLUMN IF NOT EXISTS removed_by UUID;
 ALTER TABLE public.kitchen_recipes DROP CONSTRAINT IF EXISTS kitchen_recipes_created_by_fkey;
 ALTER TABLE public.kitchen_recipes DROP CONSTRAINT IF EXISTS kitchen_recipes_updated_by_fkey;
 
@@ -86,6 +90,8 @@ BEGIN
     NEW.version    := 1;
     NEW.created_by := auth.uid();
     NEW.created_at := NOW();
+    NEW.removed_at := NULL;
+    NEW.removed_by := NULL;
   ELSE
     IF NEW.id IS DISTINCT FROM OLD.id THEN
       RAISE EXCEPTION 'A recipe''s id cannot change.';
@@ -94,6 +100,16 @@ BEGIN
     NEW.created_by := OLD.created_by;
     NEW.created_at := OLD.created_at;
     NEW.legacy     := OLD.legacy;
+    -- Removing/restoring: the time and person come from the database.
+    IF NEW.removed_at IS NULL THEN
+      NEW.removed_by := NULL;
+    ELSIF OLD.removed_at IS NULL THEN
+      NEW.removed_at := NOW();
+      NEW.removed_by := auth.uid();
+    ELSE
+      NEW.removed_at := OLD.removed_at;
+      NEW.removed_by := OLD.removed_by;
+    END IF;
   END IF;
   NEW.updated_by := auth.uid();
   NEW.updated_at := NOW();

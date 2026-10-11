@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { PantryCheck } from "../components/PantryCheck";
 import { TagChips } from "../components/TagChips";
 import { primaryButton, secondaryButton, sectionLabel } from "../components/ui";
 import { useKitchen } from "../context/KitchenContext";
@@ -9,6 +10,7 @@ import type { CookingEntry } from "../types/recipe";
 export function RecipeDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
   const { store } = useKitchen();
+  const navigate = useNavigate();
   const { data: detail, error, reload } = useLoad(() => store.getRecipe(id), [store, id]);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -32,10 +34,29 @@ export function RecipeDetailPage() {
 
   const { recipe, entries, favourite, favouriteOf } = detail;
   const lastAdvice = entries.find((e) => e.improveNextTime.trim());
+  const removed = !!recipe.removedAt;
+
+  // "Delete" hides the recipe from everyone's book but keeps it (and its
+  // history), so it can be restored from "Recently removed".
+  function setRemoved(on: boolean) {
+    if (on && !window.confirm(`Delete "${recipe.title}" from the family recipe book?\n\nIt disappears for everyone. Its history is kept, and it can be restored from "Recently removed".`)) return;
+    act(async () => {
+      const r = await store.setRemoved(recipe.id, recipe.version, on);
+      if (!r.ok) throw new Error("Someone else changed this recipe just now. Nothing was changed — have a look and try again.");
+      if (on) navigate("/", { replace: true });
+    });
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <Link to="/" className="text-sm font-medium text-sage hover:underline">← All recipes</Link>
+
+      {removed && (
+        <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <span>This recipe was deleted{recipe.removedAt ? ` on ${recipe.removedAt.slice(0, 10)}` : ""} and is hidden from the recipe book.</span>
+          <button type="button" disabled={busy} onClick={() => setRemoved(false)} className={secondaryButton}>Restore it</button>
+        </div>
+      )}
 
       <article className="mt-6 rounded-2xl border border-clay bg-cream p-6 shadow-sm sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -83,10 +104,21 @@ export function RecipeDetailPage() {
 
         <dl className="mt-6 space-y-6">
           <Field label="Ingredients" text={recipe.ingredients} />
+          {!removed && <PantryCheck ingredients={recipe.ingredients} />}
           <Field label="Method" text={recipe.instructions} />
           <Field label="Notes" text={recipe.notes} />
           {recipe.approxCalories != null && <Field label="Approx calories" text={String(recipe.approxCalories)} />}
         </dl>
+        {!removed && (
+          <div className="mt-6 flex flex-wrap gap-2 border-t border-clay/60 pt-4">
+            {recipe.instructions.trim() && (
+              <Link to={`/ideas/cook/saved/${encodeURIComponent(recipe.id)}`} className={primaryButton}>👩‍🍳 Cook along step by step</Link>
+            )}
+            <button type="button" disabled={busy} onClick={() => setRemoved(true)} className="ml-auto text-sm text-bark/50 underline hover:text-red-700">
+              Delete recipe
+            </button>
+          </div>
+        )}
       </article>
 
       <section className="mt-8">

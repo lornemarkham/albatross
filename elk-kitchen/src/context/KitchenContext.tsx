@@ -15,6 +15,9 @@ type Kitchen = {
   email: string | null;
   // Why recipes are on this device only (null when they're shared).
   notice: "not-connected" | "shared-off" | null;
+  // Signed in and confirmed on the ELK family list (by the database). Reading
+  // recipe photos and ELK Pantry need this; both are re-checked server-side.
+  member: boolean;
   signOut: (() => void) | null;
 };
 
@@ -51,7 +54,7 @@ export function KitchenProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const client = supabase;
     if (!client) {
-      setPhase({ kind: "ready", kitchen: { store: deviceStore, myName: "", email: null, notice: "not-connected", signOut: null } });
+      setPhase({ kind: "ready", kitchen: { store: deviceStore, myName: "", email: null, notice: "not-connected", member: false, signOut: null } });
       return;
     }
     if (user === undefined) return;
@@ -67,15 +70,15 @@ export function KitchenProvider({ children }: { children: ReactNode }) {
       if (access.status === "not-member") next = { kind: "not-member", email: email ?? "" };
       else if (access.status === "error") next = { kind: "error", error: access.error };
       else if (access.status === "not-set-up") {
-        next = { kind: "ready", kitchen: { store: deviceStore, myName: "", email, notice: "shared-off", signOut } };
+        next = { kind: "ready", kitchen: { store: deviceStore, myName: "", email, notice: "shared-off", member: false, signOut } };
       } else {
         const tables = await sharedTablesReady(client);
         if (tables === "ready") {
           const store = new SharedRecipeStore(client, userId);
           const myName = await store.myName();
-          next = { kind: "ready", kitchen: { store, myName, email, notice: null, signOut } };
+          next = { kind: "ready", kitchen: { store, myName, email, notice: null, member: true, signOut } };
         } else if (tables === "not-set-up") {
-          next = { kind: "ready", kitchen: { store: deviceStore, myName: "", email, notice: "shared-off", signOut } };
+          next = { kind: "ready", kitchen: { store: deviceStore, myName: "", email, notice: "shared-off", member: true, signOut } };
         } else {
           next = { kind: "error", error: tables.error };
         }

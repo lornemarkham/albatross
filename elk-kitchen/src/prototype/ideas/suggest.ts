@@ -9,7 +9,15 @@ import type { RecipeSummary } from "../../types/recipe";
 import { upcomingHolidays, seasonOf, whenLabel } from "./context";
 import { saidWords } from "./haveChips";
 import { fibreSources } from "./nutrition";
-import { answerKey, daysBetween, pantryFit, possibleMatches, type PantryFit } from "./pantryMatch";
+import { answerKey, daysBetween, pantryFit, type PantryFit } from "./pantryMatch";
+import { checkRecipe } from "../../lib/pantryCheck";
+
+// "Pantry confirms 6 of 9 ingredients" for a free-text family recipe; null when it confirms none.
+function pantryReason(ingredients: string, pantry: Parameters<typeof checkRecipe>[1]): string | null {
+  if (pantry.length === 0) return null;
+  const c = checkRecipe(ingredients, pantry);
+  return c.have > 0 ? `Pantry confirms ${c.have} of ${c.total} ingredients` : null;
+}
 import type { Answers, Moment, Mood, PantryItem, SampleIdea } from "./types";
 
 export type IdeaKey = "tonight" | "pantry" | "protein" | "healthy" | "quick" | "bbq" | "favourites" | "surprise";
@@ -154,8 +162,8 @@ function savedFor(key: IdeaKey, ctx: Ctx): SavedSuggestion[] {
       if (reasons.length && r.lastCookedOn && daysBetween(r.lastCookedOn, today) >= 30) reasons.push(`Not made since ${shortDate(r.lastCookedOn)}`);
     }
     if (key === "pantry") {
-      const m = possibleMatches(r.ingredients, ctx.pantry);
-      if (m.length) reasons.push(`Pantry may have: ${m.slice(0, 3).map((x) => x.item.name).join(", ")}`);
+      const p = pantryReason(r.ingredients, ctx.pantry);
+      if (p) reasons.push(p);
     }
     const words = SAVED_WORDS[key];
     if (words) {
@@ -280,10 +288,10 @@ export function haveShelf(ctx: Ctx): Shelf {
   for (const r of ctx.saved) {
     const text = r.ingredients.toLowerCase();
     const mentioned = words.filter((w) => mentions(text, w));
-    const pantryHits = possibleMatches(r.ingredients, ctx.pantry).map((m) => m.item.name);
+    const p = pantryReason(r.ingredients, ctx.pantry);
     const reasons = [
       ...(mentioned.length ? [`Your recipe mentions ${list(mentioned.slice(0, 3))}`] : []),
-      ...(pantryHits.length ? [`Pantry may have: ${pantryHits.slice(0, 3).join(", ")}`] : []),
+      ...(p ? [p] : []),
     ];
     if (reasons.length) saved.push({ recipe: r, reasons });
   }

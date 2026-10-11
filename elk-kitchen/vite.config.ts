@@ -57,4 +57,11 @@ const scribeApiPlugin = {
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), scribeApiPlugin],
+  // Recipe photo reading lives on ELK Inventory's family-only /api/extract
+  // (production uses the same rewrite, in vercel.json).
+  server: {
+    proxy: {
+      "/api/extract": { target: "https://elk-inventory.vercel.app", changeOrigin: true },
+    },
+  },
 });

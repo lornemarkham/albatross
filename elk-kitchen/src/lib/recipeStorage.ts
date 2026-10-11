@@ -22,6 +22,11 @@ export interface RecipeStore {
   createRecipe(input: RecipeInput): Promise<Recipe>;
   // Saves only if the recipe is still at `baseVersion`.
   updateRecipe(id: string, baseVersion: number, input: RecipeInput): Promise<UpdateResult>;
+  // "Delete" (removed = true) hides the recipe but keeps it and its history;
+  // it can be restored. Version-checked like an edit.
+  setRemoved(id: string, baseVersion: number, removed: boolean): Promise<UpdateResult>;
+  // Recipes someone removed, newest first, for "Recently removed".
+  listRemoved(): Promise<RecipeSummary[]>;
   setFavourite(recipeId: string, on: boolean): Promise<void>;
   addCookingEntry(recipeId: string, input: CookingEntryInput): Promise<CookingEntry>;
   removeCookingEntry(entryId: string): Promise<void>;
@@ -161,7 +166,25 @@ export class DeviceRecipeStore implements RecipeStore {
 
   async listRecipes() {
     const d = this.load();
-    return summarize(d.recipes, d.entries, new Set(d.favouriteRecipeIds));
+    return summarize(d.recipes.filter((r) => !r.removedAt), d.entries, new Set(d.favouriteRecipeIds));
+  }
+
+  async listRemoved() {
+    const d = this.load();
+    return summarize(d.recipes.filter((r) => r.removedAt), d.entries, new Set(d.favouriteRecipeIds));
+  }
+
+  async setRemoved(id: string, baseVersion: number, removed: boolean): Promise<UpdateResult> {
+    const d = this.load();
+    const i = d.recipes.findIndex((r) => r.id === id);
+    if (i < 0) return { ok: false, current: null };
+    const current = d.recipes[i];
+    if (current.version !== baseVersion) return { ok: false, current };
+    const now = this.now();
+    const recipe: Recipe = { ...current, removedAt: removed ? now : null, version: current.version + 1, updatedAt: now };
+    d.recipes[i] = recipe;
+    this.save(d);
+    return { ok: true, recipe };
   }
 
   async getRecipe(id: string): Promise<RecipeDetail | null> {
