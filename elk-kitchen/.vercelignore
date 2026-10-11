@@ -1,0 +1,8 @@
+# Never upload local env files: .env.local points at the shared Supabase
+# project, and Vite would bake it into the build. Production env vars are set
+# in the Vercel project (see README), not here.
+.env
+.env.*
+!.env.example
+node_modules
+dist
