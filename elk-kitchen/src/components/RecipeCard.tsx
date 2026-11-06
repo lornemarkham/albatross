@@ -1,19 +1,23 @@
 import { Link } from "react-router-dom";
 import type { RecipeSummary } from "../types/recipe";
+import type { RecipePantryCheck } from "../lib/pantryCheck";
 import { PhotoImg } from "./Photos";
 import { TagChips } from "./TagChips";
 
-type Props = { recipe: RecipeSummary };
+type Props = { recipe: RecipeSummary; pantry?: RecipePantryCheck | null };
 
-export function RecipeCard({ recipe }: Props) {
+export function RecipeCard({ recipe, pantry }: Props) {
   const cardTags = recipe.tags.slice(0, 4);
 
   return (
     <Link
       to={`/recipe/${encodeURIComponent(recipe.id)}`}
-      className="block rounded-2xl border border-clay/80 bg-cream p-5 shadow-sm transition hover:border-sage/40 hover:shadow-md"
+      className="block overflow-hidden rounded-2xl border border-clay/80 bg-cream shadow-sm transition hover:border-sage/40 hover:shadow-md"
     >
-      {recipe.photos[0] && <PhotoImg id={recipe.photos[0].id} className="mb-3 h-40 w-full rounded-xl" />}
+      {recipe.photos[0]
+        ? <PhotoImg id={recipe.photos[0].id} className="h-44 w-full" />
+        : <div aria-hidden className="flex h-24 items-center justify-center bg-gradient-to-br from-butter to-clay/60 text-4xl">{recipe.kind === "sausage" ? "🌭" : recipe.kind === "jerky" ? "🥩" : "🍲"}</div>}
+      <div className="p-4">
       {(recipe.kind !== "general" || recipe.category) && (
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-sage">{[recipe.kind !== "general" ? recipe.kind : "", recipe.category].filter((x, i, a) => x && a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i).join(" · ")}</p>
       )}
@@ -30,11 +34,15 @@ export function RecipeCard({ recipe }: Props) {
         </span>
         {recipe.approxCalories != null && <span>~{recipe.approxCalories} cal</span>}
       </div>
+      {pantry && pantry.total > 0 && (
+        <p className="mt-2 text-sm text-sage">🥫 Pantry has {pantry.have} of {pantry.total}{pantry.missing ? ` · ${pantry.missing} out` : ""}</p>
+      )}
       {cardTags.length > 0 && (
         <div className="mt-3 pointer-events-none">
           <TagChips tags={cardTags} variant="primary" />
         </div>
       )}
+      </div>
     </Link>
   );
 }

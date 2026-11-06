@@ -8,6 +8,11 @@ import { CookEntryPage } from "./pages/CookEntryPage";
 import { DataPage } from "./pages/DataPage";
 import { PhotoCapturePage } from "./pages/PhotoCapturePage";
 import { PantryPage } from "./pages/PantryPage";
+import { StartCookingPage } from "./pages/StartCookingPage";
+import { CookingSessionPage } from "./pages/CookingSessionPage";
+import { CookingReviewPage } from "./pages/CookingReviewPage";
+import { BatchJournalPage } from "./pages/BatchJournalPage";
+import { HistoryPage } from "./pages/HistoryPage";
 
 // "What should we cook?" (src/prototype — the name is historical). Reads the
 // family's recipes and ELK Pantry, writes nothing; its example ideas and
@@ -27,6 +32,11 @@ function App() {
             <Route path="/recipe/:id" element={<RecipeDetailPage />} />
             <Route path="/recipe/:id/edit" element={<RecipeFormPage />} />
             <Route path="/recipe/:id/cook" element={<CookEntryPage />} />
+            <Route path="/recipe/:id/batch/:entryId" element={<BatchJournalPage />} />
+            <Route path="/cook" element={<StartCookingPage />} />
+            <Route path="/cook/:sessionId" element={<CookingSessionPage />} />
+            <Route path="/cook/:sessionId/review" element={<CookingReviewPage />} />
+            <Route path="/history" element={<HistoryPage />} />
             <Route path="/data" element={<DataPage />} />
             <Route path="/ideas/*" element={<Suspense fallback={null}><IdeasPrototype /></Suspense>} />
           </Routes>

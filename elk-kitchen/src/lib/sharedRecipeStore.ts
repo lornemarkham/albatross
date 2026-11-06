@@ -3,6 +3,7 @@ import type { CookingEntry, CookingEntryInput, Recipe, RecipeDetail, RecipeInput
 import { normalizeDetails } from "./meat";
 import { EXPORT_APP, EXPORT_FORMAT, newId, normalizePhotos, type ExportBundle, type ImportItem, type ImportResult } from "./recipeModel";
 import { byNewestCook, keysOf, summarize, type RecipeStore, type UpdateResult } from "./recipeStorage";
+import { normalizeSession } from "./cooking/drafts";
 
 // Family recipes in the ELK Supabase project (supabase/kitchen.sql). Who may
 // read or write is decided there, by the family list; nothing here is a
@@ -34,13 +35,14 @@ function recipeExtraOf(x: unknown): Pick<Recipe, "kind" | "category" | "photos" 
     details: normalizeDetails(e.details),
   };
 }
-function entryExtraOf(x: unknown): Pick<CookingEntry, "photos" | "equipment" | "timesAndTemps" | "yieldNote" | "tastingNotes" | "details"> {
+function entryExtraOf(x: unknown): Pick<CookingEntry, "photos" | "equipment" | "timesAndTemps" | "yieldNote" | "tastingNotes" | "details" | "session"> {
   const e = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
   const s = (v: unknown) => (typeof v === "string" ? v : "");
   return {
     photos: normalizePhotos(e.photos, ""),
     equipment: s(e.equipment), timesAndTemps: s(e.timesAndTemps), yieldNote: s(e.yieldNote), tastingNotes: s(e.tastingNotes),
     details: normalizeDetails(e.details),
+    session: normalizeSession(e.session),
   };
 }
 
@@ -85,7 +87,7 @@ const entryRow = (recipeId: string, i: CookingEntryInput) => ({
   improve_next_time: i.improveNextTime,
   notes: i.notes,
   rating: i.rating,
-  extra: { photos: i.photos, equipment: i.equipment, timesAndTemps: i.timesAndTemps, yieldNote: i.yieldNote, tastingNotes: i.tastingNotes, details: i.details },
+  extra: { photos: i.photos, equipment: i.equipment, timesAndTemps: i.timesAndTemps, yieldNote: i.yieldNote, tastingNotes: i.tastingNotes, details: i.details, ...(i.session ? { session: i.session } : {}) },
 });
 
 // Supabase's API returns at most 1000 rows per request, silently. Page

@@ -158,7 +158,9 @@ CREATE TABLE IF NOT EXISTS public.kitchen_cooking_entries (
 -- v3: batch photos, equipment, times/temps, yield, tasting notes, meat details.
 ALTER TABLE public.kitchen_cooking_entries ADD COLUMN IF NOT EXISTS extra JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE public.kitchen_cooking_entries DROP CONSTRAINT IF EXISTS kitchen_cooking_entries_extra_size;
-ALTER TABLE public.kitchen_cooking_entries ADD CONSTRAINT kitchen_cooking_entries_extra_size CHECK (length(extra::text) <= 200000);
+-- v4 (Start cooking): a batch's extra also holds its cooking session (the
+-- original transcript and every event), so a long day at the smoker fits.
+ALTER TABLE public.kitchen_cooking_entries ADD CONSTRAINT kitchen_cooking_entries_extra_size CHECK (length(extra::text) <= 1000000);
 COMMENT ON TABLE public.kitchen_cooking_entries IS 'elk-kitchen: each time someone cooked a recipe.';
 CREATE INDEX IF NOT EXISTS kitchen_cooking_entries_recipe_idx ON public.kitchen_cooking_entries (recipe_id, cooked_on DESC);
 

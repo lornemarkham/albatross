@@ -8,6 +8,7 @@ import { PhotoGallery } from "../components/Photos";
 import { DetailsSummary, FoodSafetyPanel, SafetyNotes } from "../components/MeatFields";
 import { safetyChecks } from "../lib/meat";
 import { useLoad } from "../lib/useLoad";
+import { StartCookingButton } from "./StartCookingPage";
 import type { CookingEntry, RecipeKind } from "../types/recipe";
 
 export function RecipeDetailPage() {
@@ -93,6 +94,7 @@ export function RecipeDetailPage() {
           </div>
         )}
 
+        {!removed && <div className="mt-5"><StartCookingButton recipe={recipe} /></div>}
         {recipe.photos.length > 0 && <div className="mt-5"><PhotoGallery photos={recipe.photos} /></div>}
         {recipe.kind !== "general" && <div className="mt-5 rounded-xl border border-clay bg-white/60 p-4"><DetailsSummary kind={recipe.kind} d={recipe.details} /></div>}
 
@@ -133,7 +135,7 @@ export function RecipeDetailPage() {
       <section className="mt-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-bold text-bark">{recipe.kind === "general" ? "Cooking history" : "Batches"}</h2>
-          <Link to={`/recipe/${encodeURIComponent(recipe.id)}/cook`} className={`${primaryButton} min-h-12`}>{recipe.kind === "general" ? "Record a cook" : "Record a batch"}</Link>
+          <Link to={`/recipe/${encodeURIComponent(recipe.id)}/cook`} className={`${secondaryButton} min-h-12`}>{recipe.kind === "general" ? "Record a cook by hand" : "Record a batch by hand"}</Link>
         </div>
         {entries.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-dashed border-clay bg-cream/50 p-6 text-center text-bark/70">
@@ -144,6 +146,7 @@ export function RecipeDetailPage() {
             {entries.map((e) => (
               <li key={e.id}>
                 <EntryCard
+                  recipeId={recipe.id}
                   entry={e}
                   kind={recipe.kind}
                   busy={busy}
@@ -162,7 +165,7 @@ export function RecipeDetailPage() {
   );
 }
 
-function EntryCard({ entry: e, kind, busy, onRemove }: { entry: CookingEntry; kind: RecipeKind; busy: boolean; onRemove: () => void }) {
+function EntryCard({ recipeId, entry: e, kind, busy, onRemove }: { recipeId: string; entry: CookingEntry; kind: RecipeKind; busy: boolean; onRemove: () => void }) {
   return (
     <article className="rounded-2xl border border-clay bg-cream p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -187,6 +190,9 @@ function EntryCard({ entry: e, kind, busy, onRemove }: { entry: CookingEntry; ki
         <Field label="Next time" text={e.improveNextTime} small />
         <Field label="Notes" text={e.notes} small />
       </dl>
+      <Link to={`/recipe/${encodeURIComponent(recipeId)}/batch/${encodeURIComponent(e.id)}`} className="mt-3 inline-block text-sm font-semibold text-sage underline">
+        {e.session ? "🎤 Open the cooking journal" : "Open"}
+      </Link>
       {e.mine && (
         <button type="button" disabled={busy} onClick={onRemove} className="mt-3 text-xs text-bark/50 underline hover:text-red-700">
           Remove this entry

@@ -183,6 +183,9 @@ test("kitchen-photos.sql: private bucket, family-only read and add, no delete", 
   await runFile(db, "supabase/kitchen-photos.sql");
   const b = (await db.query<{ public: boolean }>("SELECT public FROM storage.buckets WHERE id='kitchen-photos'")).rows;
   assert.deepEqual(b, [{ public: false }]);
+  const types = (await db.query<{ allowed_mime_types: string[] }>("SELECT allowed_mime_types FROM storage.buckets WHERE id='kitchen-photos'")).rows[0].allowed_mime_types;
+  for (const t of ["image/jpeg", "video/mp4", "video/webm", "video/quicktime", "audio/webm", "audio/mp4"]) assert.ok(types.includes(t), t);
+  assert.equal(new Set(types).size, types.length, "re-running adds no duplicates");
   const pols = (await db.query<{ cmd: string; qual: string; with_check: string }>("SELECT cmd, qual, with_check FROM pg_policies WHERE tablename='objects' AND policyname LIKE '%kitchen photos'")).rows;
   assert.deepEqual(pols.map((p) => p.cmd).sort(), ["INSERT", "SELECT"]);
   for (const p of pols) assert.match(`${p.qual} ${p.with_check}`, /elk_is_family_member/);

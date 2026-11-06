@@ -1,6 +1,7 @@
 import type { CookingEntry, LegacyRecipe, PhotoRef, Recipe, RecipeKind } from "../types/recipe";
 import { blankDetails, normalizeDetails } from "./meat";
 import type { ExportedPhoto } from "./photos";
+import { normalizeSession } from "./cooking/drafts";
 
 // ── Legacy (browser-only) recipes ────────────────────────────────────────────
 
@@ -218,6 +219,7 @@ export function normalizeEntry(raw: unknown, now: string): CookingEntry {
     yieldNote: str(e.yieldNote),
     tastingNotes: str(e.tastingNotes),
     details: normalizeDetails(e.details),
+    session: normalizeSession(e.session),
     createdAt: str(e.createdAt) || now,
     mine: true,
   };

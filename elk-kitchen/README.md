@@ -6,7 +6,8 @@ substitutions, the family's reaction, what to change next time). Favourites
 are per person.
 
 **Product authority:** read [`docs/KITCHEN-PRODUCT-DOCTRINE.md`](docs/KITCHEN-PRODUCT-DOCTRINE.md)
-before changing how Kitchen behaves.
+before changing how Kitchen behaves. **Releasing:** [`docs/RELEASE.md`](docs/RELEASE.md). There's no approved
+release path yet.
 
 ```
 npm install
@@ -153,13 +154,65 @@ What import does:
 
 ## Boundary with ELK Inventory
 
-Kitchen owns recipes, cooking history, substitutions, reactions,
-improvements and favourites. Inventory owns physical stock: quantities,
-locations, lots and consumption movements. Kitchen only *reads* Inventory's
-pantry tables (above) and never writes them. When "I cooked this" should use up pantry stock, the
-plan is for Kitchen to call Inventory's own `pantry_*` functions
-(oldest-first use), referencing a cooking entry id, rather than keeping any
-stock records of its own.
+Kitchen owns recipes, cooking sessions, batches (cooking history), substitutions, reactions,
+improvements and favourites. Inventory owns physical stock: quantities, lots, locations and
+stock movements. Kitchen keeps no stock records of its own.
+
+Kitchen reads Inventory's pantry tables with the signed-in person's token (above), and changes
+stock **only** through Inventory's own family-only functions, after the person confirms each change on
+the cook's review screen (`src/lib/pantryStock.ts`):
+
+| Kitchen action | Inventory function | Notes |
+|---|---|---|
+| "Use 2 packs of pork shoulder from the Garage freezer batch" | `pantry_use(item, quantity, lot, request id)` | Whole packages only. A chosen lot, or oldest first. Inventory refuses and changes nothing if there isn't enough. |
+| "Put 6 packs of sausage in the chest freezer, best before …" | `pantry_receive(item, quantity, place, best before, made on, new name, unit, request id)` | A new Pantry product if the name is new. |
+| Undo either of those | `pantry_undo(batch id)` | Once. |
+| Add missing ingredients to the shopping list | `pantry_shopping_add` | As before. |
+
+Each call carries a request id that Kitchen generates and keeps until it succeeds. A retry (weak
+connection, double tap) does nothing a second time. The batch keeps a receipt of each change
+(item, lot, count, request id), and Inventory keeps the movement history. Opening a recipe or
+starting a cook never changes stock (doctrine §7). Spoken grams are never turned into stock
+changes: Pantry counts packages. Tests run these calls against verbatim copies of Inventory's SQL
+(`tests/fixtures/inventory-*.sql`; `tests/pantry-stock.test.ts`).
+
+Known gap (Inventory's to decide): `pantry_receive` records finished food with lot source
+`purchase`, and its movements can't reference the Kitchen batch. A `p_source`/`p_note` parameter
+in Inventory would make "made in Kitchen" visible there.
+
+## Start cooking (hands-free cooking sessions)
+
+`/cook` → pick a recipe (or "something new") → the cooking screen.
+
+- **Microphone:** tap the big button to talk. By default it listens for one thing, then stops.
+  "Keep listening until I tap stop" is an opt-in. It also stops on "stop listening", on a tap, and
+  whenever the page is hidden. There's no wake word and no always-on mic. Uses the browser's own
+  speech recognition (Chrome/Android, Safari/iOS). Where it's missing, type instead.
+- **Commands** (`src/lib/cooking/parse.ts`, rule-based, not AI): "Add 40 grams of salt",
+  "Change that to 35 grams", "Start a 20-minute timer", "What's the next step?", "Read that
+  again", "Make a note for next time", "How much pepper do I need for 3 kilograms?" (only from
+  the recipe's own ratios), temperatures, equipment, tasting notes, "stop listening". Anything else
+  is kept as a note.
+- **Never silent:** a quantity with no unit, a correction that halves or doubles a number or changes
+  its unit, an ingredient said twice, a removal, or a temperature with no unit is *asked*
+  (Yes / No, by voice or tap). Nothing changes until "yes". Every change keeps its history
+  ("said 40 g, corrected → 35 g").
+- **Kept:** the transcript exactly as heard, timestamped events, timers, temperatures, photos,
+  short clips (≤ 15 MB), voice notes, and ingredient edits by hand. The whole session is saved to the
+  phone after every change (`elk-kitchen-cooking-v1`), so a reload or a locked phone loses nothing.
+- **Finish → Review:** Kitchen fills in the batch (what went in, equipment, temperatures and
+  times, tasting notes, next time, notes) from the session. The person edits it, confirms
+  Pantry use and puts the finished food into Pantry, then saves. The batch stores the session
+  (`session`, in the `extra` JSON column in shared mode), so the journal, transcript and media
+  come back with the batch, in backups and imports too. A cook with no recipe is saved as a new
+  recipe.
+- **Journal:** `/recipe/:id/batch/:entryId` (timeline with media, transcript, Pantry receipts) and
+  `/history` (every cook, newest first).
+
+What it doesn't do yet: no AI rewriting of the session. The summary is assembled by rules from
+what was said, so it's predictable. An AI pass would need a server endpoint (Inventory's
+`/api/extract` holds the only key) and a review step, and it's a separate decision. Voice notes are
+kept as audio and aren't transcribed. Clips and voice notes in shared mode need `kitchen-photos.sql` v2.
 
 ## Known gaps (follow-ups)
 
@@ -191,8 +244,9 @@ stock records of its own.
   without overwriting. Take a backup after each cook until the shared database
   is switched on.
 - **Shared mode** needs, in order: `kitchen.sql` (v3 adds an `extra` JSON column
-  to the recipe and batch tables; additive, re-runnable), then
-  `kitchen-photos.sql` (private `kitchen-photos` bucket, family-only read/add,
-  no delete), then `kitchen-verify.sql`; then the Vercel env vars above.
+  to the recipe and batch tables; v4 lets a batch's `extra` hold a cooking session, up to
+  1 000 000 characters; additive, re-runnable), then
+  `kitchen-photos.sql` (v2: private `kitchen-photos` bucket for photos, clips and voice
+  notes, family-only read/add, no delete), then `kitchen-verify.sql`; then the Vercel env vars above.
   Shared-mode photo upload has been tested against PGlite policies only, not a
   live Supabase Storage bucket.

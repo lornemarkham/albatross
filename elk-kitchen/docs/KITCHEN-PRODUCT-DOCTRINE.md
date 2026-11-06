@@ -297,7 +297,7 @@ These safety properties already exist in shared recipes (`supabase/kitchen.sql`,
 | Q4 | **Are preferences held per household or per person?** | Favourites are per person. Ratings and reactions are recorded on each cooking entry. There is no preference model. |
 | Q5 | **How are AI-generated recipes verified?** | Inventory has a Draft → Review → Approve pipeline for AI intake. Kitchen has no AI path in production. |
 | Q6 | **How do substitutions change nutrition?** | Undecided. Substitutions are free text on cooking entries. |
-| Q7 | **How are pantry deductions confirmed?** | Kitchen's README plans to call Inventory's `pantry_*` functions, referencing a cooking-entry id. There's no confirmation design yet. |
+| Q7 | **How are pantry deductions confirmed?** | **Decided 2026-11-06 (owner's M620 brief: "Updating Inventory after user confirmation"; "Inventory owns quantities, lots and stock movements. Kitchen owns recipes, cooking sessions and batch records"; "Do not … write directly into another product's database without an approved contract"):** on the cook's review screen the person picks the Pantry item, the batch (lot) and a whole-number count, and confirms each one. Kitchen then calls Inventory's own `pantry_use` / `pantry_receive` / `pantry_undo` with a retry-safe request id and keeps a receipt on the batch. Kitchen never converts spoken grams into stock changes. See README, "Boundary with ELK Inventory". |
 | Q8 | **Planned meals or spontaneous suggestions?** | Undecided. Inventory's vision text mentions "meal planning" under Kitchen. |
 | Q9 | **Who owns the shopping list?** | **Decided 2026-10-11 (owner's family-readiness brief):** Pantry owns it — `pantry_shopping_items` in Inventory's `supabase-pantry.sql`. Kitchen only adds a recipe's missing ingredients through `pantry_shopping_add`, which the person ticks first; it never reads or changes stock. |
 | Q10 | **Where are the boundaries on recipe import and copyright?** | Undecided. Imports today are the household's own recipes only. |
@@ -453,3 +453,5 @@ Add canonical product decisions here: the date, the decision, the reason, and a 
 | Date | Decision | Notes |
 |---|---|---|
 | 2026-10-10 | This doctrine is adopted as Kitchen's product authority. | Priorities (§10) and the human loop (§8) are recorded as proposals, not decisions. |
+| 2026-11-06 | Q7: Pantry changes from Kitchen are confirmed one by one on the cook's review screen and made through Inventory's own `pantry_*` functions. | Owner's M620 brief (Phase 4). Kitchen keeps receipts; Inventory keeps stock and movements. |
+| 2026-11-06 | Cooking sessions (Start cooking) are Kitchen records, saved inside the batch they produce, with the original transcript kept unchanged. | Owner's M620 brief (Phases 2–5): "Preserve the original transcript", "Never silently change important measurements". |

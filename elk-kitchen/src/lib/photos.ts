@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PhotoRef } from "../types/recipe";
+import type { CookingSession } from "../types/cooking";
+import { sessionMediaIds } from "./cooking/summary";
 import { newId, type ExportBundle } from "./recipeModel";
 
 // Photo bytes live apart from recipe records. A recipe or cook holds only
@@ -57,7 +59,9 @@ export class IndexedDbPhotoStore implements PhotoStore {
   async has(id: string) { return (await this.run("readonly", (s) => s.count(id))) > 0; }
 }
 
-const photoPath = (id: string) => `${id}.jpg`;
+// Photos are stored as "<id>.jpg". Video clips and voice notes carry their
+// own extension in the id ("<uuid>.webm"), so the path is the id.
+const photoPath = (id: string) => (/\.[a-z0-9]{2,5}$/.test(id) ? id : `${id}.jpg`);
 
 // Family photos: a private Supabase Storage bucket (supabase/kitchen-photos.sql),
 // readable and writable by family members only. Never overwrites: a second
@@ -68,7 +72,7 @@ export class SharedPhotoStore implements PhotoStore {
   constructor(client: SupabaseClient) { this.client = client; }
 
   async put(id: string, blob: Blob) {
-    const { error } = await this.client.storage.from(BUCKET).upload(photoPath(id), blob, { contentType: blob.type || "image/jpeg", upsert: false });
+    const { error } = await this.client.storage.from(BUCKET).upload(photoPath(id), blob, { contentType: blob.type.split(";")[0] || "image/jpeg", upsert: false });
     if (error && !/already exists|duplicate/i.test(error.message)) throw new Error(`Couldn't upload the photo: ${error.message}`);
   }
   async get(id: string) {
@@ -158,10 +162,16 @@ export async function bundleWithPhotos(
   store: { exportAll(): Promise<ExportBundle> }, photoStore: PhotoStore,
 ): Promise<ExportBundle> {
   const bundle = await store.exportAll();
-  const ids = [...bundle.recipes, ...bundle.cookingEntries].flatMap((x) => x.photos.map((p) => p.id));
+  const ids = [
+    ...[...bundle.recipes, ...bundle.cookingEntries].flatMap((x) => x.photos.map((p) => p.id)),
+    ...bundle.cookingEntries.flatMap((e) => sessionMediaIds(e.session)),
+  ];
   const { photos, missing } = await exportPhotos(photoStore, ids);
   return { ...bundle, photos, ...(missing.length ? { missingPhotoIds: missing } : {}) };
 }
 
-export const photoIdsOf = (items: { recipe: { photos: PhotoRef[] }; newEntries: { photos: PhotoRef[] }[]; selected: boolean }[]) =>
-  items.filter((i) => i.selected).flatMap((i) => [...i.recipe.photos, ...i.newEntries.flatMap((e) => e.photos)].map((p) => p.id));
+export const photoIdsOf = (items: { recipe: { photos: PhotoRef[] }; newEntries: { photos: PhotoRef[]; session?: CookingSession | null }[]; selected: boolean }[]) =>
+  items.filter((i) => i.selected).flatMap((i) => [
+    ...[...i.recipe.photos, ...i.newEntries.flatMap((e) => e.photos)].map((p) => p.id),
+    ...i.newEntries.flatMap((e) => sessionMediaIds(e.session)),
+  ]);

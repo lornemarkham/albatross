@@ -2,11 +2,16 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { RecipeCard } from "../components/RecipeCard";
 import { ModeNotice } from "../components/ModeNotice";
-import { inputClass, secondaryButton } from "../components/ui";
+import { inputClass } from "../components/ui";
 import { useKitchen } from "../context/KitchenContext";
 import { readDeviceData } from "../lib/recipeStorage";
 import { useLoad } from "../lib/useLoad";
 import type { RecipeSummary } from "../types/recipe";
+import { useDrafts } from "../lib/cooking/useCookingSession";
+import { usePantry } from "../lib/usePantry";
+import { checkRecipe } from "../lib/pantryCheck";
+import { ContinueCooking } from "./StartCookingPage";
+import { HistoryCard, cookingHistory } from "./HistoryPage";
 
 // Matches every word typed, anywhere in the title, ingredients, tags, author or notes.
 export function matchesSearch(r: RecipeSummary, q: string): boolean {
@@ -16,6 +21,7 @@ export function matchesSearch(r: RecipeSummary, q: string): boolean {
 
 const ACTIONS: { to: string; icon: string; label: string; sub: string }[] = [
   { to: "/ideas", icon: "🍲", label: "What should we cook?", sub: "Ideas from your recipes" },
+  { to: "/history", icon: "📖", label: "Cooking history", sub: "Every cook and batch" },
   { to: "/add?kind=jerky", icon: "🥩", label: "New jerky recipe", sub: "Weights, cure, temps" },
   { to: "/add?kind=sausage", icon: "🌭", label: "New sausage recipe", sub: "Grind, casing, smoke" },
   { to: "/add/photo", icon: "📷", label: "Photograph a recipe", sub: "Card, book or note" },
@@ -38,27 +44,50 @@ export function RecipeListPage() {
     return device.recipes.filter((r) => !keys.recipeIds.has(r.id)).length;
   }, [store]).data ?? 0;
 
+  const drafts = useDrafts();
+  const unsaved = drafts.unsaved();
+  const recent = useLoad(() => cookingHistory(store, 3), [store]);
+  const { pantry } = usePantry();
+  const pantryItems = pantry && pantry !== "off" && pantry.status === "ready" ? pantry.items : null;
   const shown = (recipes ?? []).filter((r) => (!onlyFavourites || r.favourite) && matchesSearch(r, q));
   // Photo reading and the pantry need the family account; /ideas works anywhere.
-  const actions = ACTIONS.filter((a) => member || a.to === "/ideas" || a.to.startsWith("/add"));
+  const actions = ACTIONS.filter((a) => member || a.to === "/ideas" || a.to === "/history" || a.to.startsWith("/add"));
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <header className="mb-4 flex items-end justify-between gap-4">
+    <div className="mx-auto max-w-3xl px-4 py-6">
+      <header className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-bark">ELK Kitchen</h1>
-          <p className="mt-1 text-bark/70">The family recipe book.</p>
+          <h1 className="font-display text-3xl font-bold tracking-tight text-bark">ELK Kitchen</h1>
+          <p className="text-sm text-bark/70">Cook it, talk it through, remember it.</p>
         </div>
-        <Link to="/data" className={`${secondaryButton} shrink-0`}>Backup &amp; import</Link>
+        <Link to="/data" className="shrink-0 text-sm text-sage underline">Backup &amp; import</Link>
       </header>
 
-      <nav aria-label="Main actions" className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <section className="mb-5 overflow-hidden rounded-3xl bg-cocoa p-5 text-butter shadow-md sm:p-7">
+        <p className="text-xs font-bold uppercase tracking-widest text-saffron">Hands-free cooking</p>
+        <h2 className="mt-1 font-display text-2xl font-semibold leading-tight sm:text-3xl">What are we cooking?</h2>
+        <p className="mt-1 text-sm text-butter/75">Say what goes in, fix it by voice, set timers, snap photos. Kitchen keeps the notes and asks before it guesses.</p>
+        <Link to="/cook" className="mt-4 flex min-h-16 items-center justify-center gap-3 rounded-2xl bg-tomato text-xl font-bold text-white shadow-lg transition hover:bg-tomato/90">
+          <span aria-hidden className="text-2xl">🎤</span> Start cooking
+        </Link>
+      </section>
+
+      {unsaved.length > 0 && <div className="mb-5"><ContinueCooking sessions={unsaved} /></div>}
+
+      {(recent.data?.length ?? 0) > 0 && (
+        <section className="mb-6">
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 className="text-xl font-bold text-bark">Recently cooked</h2>
+            <Link to="/history" className="text-sm text-sage underline">All history</Link>
+          </div>
+          <ul className="space-y-2">{recent.data!.map((i) => <li key={i.entry.id}><HistoryCard item={i} /></li>)}</ul>
+        </section>
+      )}
+
+      <nav aria-label="More" className="no-scrollbar -mx-4 mb-6 flex gap-2 overflow-x-auto px-4">
         {actions.map((a) => (
-          <Link key={a.to} to={a.to}
-            className={`flex flex-col gap-0.5 rounded-2xl border p-4 shadow-sm transition hover:shadow-md ${a.to === "/add/photo" ? "border-sage bg-sage text-white" : "border-clay bg-cream text-bark"}`}>
-            <span className="text-2xl" aria-hidden>{a.icon}</span>
-            <span className="font-semibold leading-tight">{a.label}</span>
-            <span className={`text-xs ${a.to === "/add/photo" ? "text-white/80" : "text-bark/60"}`}>{a.sub}</span>
+          <Link key={a.to} to={a.to} className="flex shrink-0 items-center gap-2 rounded-full border border-clay bg-cream px-4 py-2.5 text-sm font-medium text-bark shadow-sm">
+            <span aria-hidden>{a.icon}</span>{a.label}
           </Link>
         ))}
       </nav>
@@ -103,7 +132,7 @@ export function RecipeListPage() {
         <ul className="grid gap-4 sm:grid-cols-2">
           {shown.map((recipe) => (
             <li key={recipe.id}>
-              <RecipeCard recipe={recipe} />
+              <RecipeCard recipe={recipe} pantry={pantryItems ? checkRecipe(recipe.ingredients, pantryItems) : null} />
             </li>
           ))}
         </ul>

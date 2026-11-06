@@ -1,3 +1,5 @@
+import type { CookingSession } from "./cooking";
+
 // A photo kept with a recipe or a cook. The picture itself lives in the photo
 // store (src/lib/photos.ts) under this id; this is only the reference.
 export type PhotoRef = {
@@ -70,6 +72,9 @@ export type CookingEntry = {
   yieldNote: string;
   tastingNotes: string;
   details: MeatDetails;
+  // The cooking session this batch came from (Start cooking): the original
+  // transcript, every change, timers, temperatures, media and Pantry receipts.
+  session?: CookingSession | null;
   createdAt: string;
   // True when the current person recorded it (and so may remove it).
   mine: boolean;
