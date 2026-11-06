@@ -5,7 +5,12 @@ import { useKitchen } from "../context/KitchenContext";
 import { parseOptionalNumber, parseTags } from "../lib/recipeModel";
 import { generateSuggestedTags } from "../lib/suggestedTags";
 import { clearDraft, readDraft, withReadTags, type PhotoDraft } from "../lib/capture/recipeCapture";
-import type { Recipe, RecipeInput } from "../types/recipe";
+import { FoodSafetyPanel, MeatFields } from "../components/MeatFields";
+import { PhotoPicker } from "../components/Photos";
+import { blankDetails, CATEGORIES, KINDS } from "../lib/meat";
+import type { MeatDetails, PhotoRef, Recipe, RecipeInput, RecipeKind } from "../types/recipe";
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 type Form = {
   title: string;
@@ -15,6 +20,10 @@ type Form = {
   notes: string;
   tagsRaw: string;
   approxCalories: string;
+  kind: RecipeKind;
+  category: string;
+  photos: PhotoRef[];
+  details: MeatDetails;
 };
 
 const formOf = (r: Recipe): Form => ({
@@ -25,11 +34,16 @@ const formOf = (r: Recipe): Form => ({
   notes: r.notes,
   tagsRaw: r.tags.join(", "),
   approxCalories: r.approxCalories == null ? "" : String(r.approxCalories),
+  kind: r.kind,
+  category: r.category,
+  photos: r.photos,
+  details: r.details,
 });
 
 const FIELD_LABELS: Record<keyof Form, string> = {
   title: "Title", authorName: "Recipe by", ingredients: "Ingredients", instructions: "Method",
   notes: "Notes", tagsRaw: "Tags", approxCalories: "Approx calories",
+  kind: "Type", category: "Category", photos: "Photos", details: "Jerky/sausage details",
 };
 
 function toInput(form: Form): RecipeInput {
@@ -44,6 +58,10 @@ function toInput(form: Form): RecipeInput {
     tags: parseTags(form.tagsRaw),
     suggestedTags: generateSuggestedTags(draft),
     approxCalories: calories == null ? null : Math.round(calories),
+    kind: form.kind,
+    category: form.category,
+    photos: form.photos,
+    details: form.kind === "general" ? blankDetails() : form.details,
   };
 }
 
@@ -56,7 +74,7 @@ export function RecipeFormPage() {
   const location = useLocation();
   const [params] = useSearchParams();
 
-  const blank: Form = { title: "", authorName: myName, ingredients: "", instructions: "", notes: "", tagsRaw: "", approxCalories: "" };
+  const blank: Form = { title: "", authorName: myName, ingredients: "", instructions: "", notes: "", tagsRaw: "", approxCalories: "", kind: params.get("kind") === "jerky" || params.get("kind") === "sausage" ? (params.get("kind") as RecipeKind) : "general", category: "", photos: [], details: blankDetails() };
   // A recipe read from photos, waiting for a person to check it (never saved until they do).
   const [photo] = useState<PhotoDraft | null>(() =>
     editing || params.get("from") !== "photo" ? null : ((location.state as PhotoDraft | null) ?? readDraft(window.sessionStorage)));
@@ -87,7 +105,7 @@ export function RecipeFormPage() {
     return () => { cancelled = true; };
   }, [editing, id, store]);
 
-  const dirty = (Object.keys(form) as (keyof Form)[]).some((k) => form[k] !== initial[k]);
+  const dirty = (Object.keys(form) as (keyof Form)[]).some((k) => !same(form[k], initial[k]));
   useEffect(() => {
     if (!dirty) return;
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); };
@@ -156,15 +174,15 @@ export function RecipeFormPage() {
   }
 
   const theirs = conflict && conflict !== "deleted" ? formOf(conflict) : null;
-  const changedByThem = theirs ? (Object.keys(theirs) as (keyof Form)[]).filter((k) => theirs[k] !== initial[k]) : [];
+  const changedByThem = theirs ? (Object.keys(theirs) as (keyof Form)[]).filter((k) => !same(theirs[k], initial[k])) : [];
   // Fields both of you changed differently — the only places "mine" replaces "theirs".
-  const clashes = theirs ? changedByThem.filter((k) => form[k] !== initial[k] && form[k] !== theirs[k]) : [];
+  const clashes = theirs ? changedByThem.filter((k) => !same(form[k], initial[k]) && !same(form[k], theirs[k])) : [];
 
   // Keep their changes in every field you didn't touch; yours win only where you edited.
   function saveMerged(current: Recipe) {
     const theirForm = formOf(current);
     const merged = { ...theirForm };
-    for (const k of Object.keys(form) as (keyof Form)[]) if (form[k] !== initial[k]) merged[k] = form[k];
+    for (const k of Object.keys(form) as (keyof Form)[]) if (!same(form[k], initial[k])) (merged as Record<string, unknown>)[k] = form[k];
     setConflict(null);
     setForm(merged);
     setInitial(theirForm);
@@ -195,6 +213,18 @@ export function RecipeFormPage() {
             <input id="title" name="title" required maxLength={200} className={inputClass} value={form.title} onChange={handleChange} />
           </div>
           <div>
+            <label htmlFor="kind" className={labelClass}>What kind of recipe?</label>
+            <div className="mt-1 grid grid-cols-3 gap-2" role="radiogroup" aria-label="Recipe type">
+              {KINDS.map((k) => (
+                <button
+                  key={k.value} type="button" role="radio" aria-checked={form.kind === k.value}
+                  onClick={() => setForm((f) => ({ ...f, kind: k.value, category: f.category || (k.value === "jerky" ? "Jerky" : k.value === "sausage" ? "Sausage" : "") }))}
+                  className={`min-h-14 rounded-xl border px-2 text-base font-medium ${form.kind === k.value ? "border-sage bg-sage text-white" : "border-clay bg-cream text-bark"}`}
+                >{k.label}</button>
+              ))}
+            </div>
+          </div>
+          <div>
             <label htmlFor="authorName" className={labelClass}>Recipe by</label>
             <input id="authorName" name="authorName" maxLength={60} className={inputClass} value={form.authorName} onChange={handleChange} />
           </div>
@@ -213,6 +243,23 @@ export function RecipeFormPage() {
           <div>
             <label htmlFor="tagsRaw" className={labelClass}>Tags (comma separated)</label>
             <input id="tagsRaw" name="tagsRaw" className={inputClass} placeholder="soup, cheese, weeknight" value={form.tagsRaw} onChange={handleChange} />
+          </div>
+          <div>
+            <label htmlFor="category" className={labelClass}>Category</label>
+            <select id="category" name="category" className={inputClass} value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}>
+              <option value="">— none —</option>
+              {[...new Set([...CATEGORIES, ...(form.category ? [form.category] : [])])].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          {form.kind !== "general" && (
+            <>
+              <MeatFields kind={form.kind} mode="plan" value={form.details} onChange={(details) => setForm((f) => ({ ...f, details }))} />
+              <FoodSafetyPanel kind={form.kind} />
+            </>
+          )}
+          <div>
+            <p className={labelClass}>Photos</p>
+            <PhotoPicker value={form.photos} onChange={(photos) => setForm((f) => ({ ...f, photos }))} />
           </div>
           <div className="sm:w-1/2">
             <label htmlFor="approxCalories" className={labelClass}>Approx calories</label>

@@ -30,7 +30,8 @@ OpenAI key, checks the sign-in token against `elk_is_family_member()` before
 touching it, and streams its answer so slow multi-page reads survive Vercel
 Edge's 25 s limit. The answer fills in the recipe form, with anything the
 model couldn't read listed above it; nothing is saved until the person
-presses Save. Photos are not stored anywhere. Kitchen's Vercel project has
+presses Save. (The photos you take of a recipe card are only read, not kept;
+photos you attach to a recipe or a batch are stored — see below.) Kitchen's Vercel project has
 no OpenAI key and needs none.
 
 ## ELK Pantry (`/pantry`, recipe pages, `/ideas`)
@@ -169,3 +170,29 @@ stock records of its own.
   by the *old* app under `elk-kitchen-recipes` (only possible from an old tab
   left open) aren't offered for import automatically. They're still included
   in **Export** (`legacyBrowserRecipes`), and importing that file picks them up.
+
+## Weekend release: jerky, sausage, batches and photos
+
+- **Recipes** have a type (everyday / jerky / sausage), a category, tags, and any
+  number of photos. Jerky and sausage recipes add meat weight, fat %, seasoning
+  ratios (one per line, "Salt 2%" → grams for the meat weight), marinade,
+  grinding plate, casing and planned smoking/cooking temperatures.
+- **Batches** (`/recipe/:id/cook`) are separate entries: date, what was used,
+  substitutions, equipment, temperatures and times, yield, photos, tasting notes,
+  rating, "next time", plus the jerky/sausage numbers (internal temp, finished
+  weight, yield %). Recording a batch never changes the recipe.
+- **Food safety** text and the temperature warnings follow USDA FSIS (160 °F /
+  71 °C for ground meat, 165 °F / 74 °C poultry; jerky dried at 130–140 °F+).
+  They are prompts, not a guarantee — see `src/lib/meat.ts` for sources.
+- **Storage.** Without `VITE_SUPABASE_*` (the current production build) everything
+  — recipes in localStorage, photos in IndexedDB (shrunk to 1600 px, read back
+  after saving, persistent storage requested) — stays on that phone. **Backup &
+  import** writes one JSON file that includes the photos, and restoring it adds
+  without overwriting. Take a backup after each cook until the shared database
+  is switched on.
+- **Shared mode** needs, in order: `kitchen.sql` (v3 adds an `extra` JSON column
+  to the recipe and batch tables; additive, re-runnable), then
+  `kitchen-photos.sql` (private `kitchen-photos` bucket, family-only read/add,
+  no delete), then `kitchen-verify.sql`; then the Vercel env vars above.
+  Shared-mode photo upload has been tested against PGlite policies only, not a
+  live Supabase Storage bucket.

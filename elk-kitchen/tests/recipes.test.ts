@@ -1,6 +1,7 @@
 // Recipe persistence, editing, cooking history, import/export, duplicate
 // prevention and data preservation — through the device (localStorage) store
 // and the pure model, with no browser.
+import { ENTRY_EXTRA, RECIPE_EXTRA } from "./defaults.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DeviceRecipeStore, DEVICE_KEY, LEGACY_KEY, readDeviceData } from "../src/lib/recipeStorage";
@@ -34,11 +35,11 @@ const soup: RecipeInput = {
   title: "Cheese Drawer Soup", authorName: "Lorne",
   ingredients: "Leftover cheddar\nParmesan rind\nStock\nPotato\nOnion",
   instructions: "Sweat onion, simmer potato in stock, melt in cheese, blend.",
-  notes: "Uses up the cheese drawer.", tags: ["soup", "cheese"], suggestedTags: [], approxCalories: 450,
+  notes: "Uses up the cheese drawer.", tags: ["soup", "cheese"], suggestedTags: [], approxCalories: 450, ...RECIPE_EXTRA,
 };
 const cook = (over: Partial<CookingEntryInput>): CookingEntryInput => ({
   cookedOn: "2026-10-10", cookName: "Lorne", ingredientsUsed: "", substitutions: "", familyReaction: "",
-  improveNextTime: "", notes: "", rating: null, ...over,
+  improveNextTime: "", notes: "", rating: null, ...ENTRY_EXTRA, ...over,
 });
 
 test("legacy recipes are split into a recipe + its first cooking entry, keeping the id and the original", () => {
@@ -191,8 +192,8 @@ test("duplicate prevention: same id is never overwritten; same title with a new 
       { ...mine, id: "other-id", title: "  cheese drawer SOUP " }, // same title, different id
       { ...mine, id: "dup", title: "Dup" }, { ...mine, id: "dup", title: "Dup again" }, // twice in one file
     ],
-    entries: [{ id: "e1", recipeId: mine.id, cookedOn: "2026-01-01", cookName: "", ingredientsUsed: "", substitutions: "", familyReaction: "", improveNextTime: "", notes: "from file", rating: null, createdAt: "", mine: true }],
-    favouriteRecipeIds: [],
+    entries: [{ id: "e1", recipeId: mine.id, cookedOn: "2026-01-01", cookName: "", ingredientsUsed: "", substitutions: "", familyReaction: "", improveNextTime: "", notes: "from file", rating: null, ...ENTRY_EXTRA, createdAt: "", mine: true }],
+    favouriteRecipeIds: [], photos: [],
   };
   const plan = planImport(incoming, await store.existingKeys());
   assert.deepEqual(plan.map((x) => [x.recipe.id, x.status, x.selected, x.newEntries.length]), [
@@ -224,7 +225,7 @@ test("Delete hides a recipe but keeps it and its history; Restore brings it back
   const s = new MemoryStorage();
   const store = new DeviceRecipeStore(s, clock);
   const r = await store.createRecipe(soup);
-  await store.addCookingEntry(r.id, { cookedOn: "2026-10-01", cookName: "Lorne", ingredientsUsed: "", substitutions: "", familyReaction: "", improveNextTime: "More salt", notes: "", rating: 8 });
+  await store.addCookingEntry(r.id, { cookedOn: "2026-10-01", cookName: "Lorne", ingredientsUsed: "", substitutions: "", familyReaction: "", improveNextTime: "More salt", notes: "", rating: 8, ...ENTRY_EXTRA });
 
   assert.deepEqual(await store.setRemoved(r.id, 99, true), { ok: false, current: r }, "someone else changed it first");
   const gone = await store.setRemoved(r.id, r.version, true);

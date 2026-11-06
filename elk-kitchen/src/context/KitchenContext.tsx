@@ -4,11 +4,14 @@ import { supabase } from "../lib/supabase";
 import { classifyAccess } from "../lib/familyAccess";
 import { DeviceRecipeStore, type RecipeStore } from "../lib/recipeStorage";
 import { SharedRecipeStore, sharedTablesReady } from "../lib/sharedRecipeStore";
+import { IndexedDbPhotoStore, SharedPhotoStore, requestPersistence, type PhotoStore } from "../lib/photos";
 import { LoginPage } from "../pages/LoginPage";
 import { DownloadDeviceExport } from "../components/DownloadDeviceExport";
 
 type Kitchen = {
   store: RecipeStore;
+  // Where photo bytes go: this device (IndexedDB) or the family bucket.
+  photos: PhotoStore;
   // Always this browser's own storage — for exporting/importing what's here.
   deviceStore: DeviceRecipeStore;
   myName: string;
@@ -34,12 +37,18 @@ type Phase =
   | { kind: "signed-out" }
   | { kind: "not-member"; email: string }
   | { kind: "error"; error: string }
-  | { kind: "ready"; kitchen: Omit<Kitchen, "deviceStore"> };
+  | { kind: "ready"; kitchen: Omit<Kitchen, "deviceStore" | "photos"> };
 
 export function KitchenProvider({ children }: { children: ReactNode }) {
   const deviceStore = useMemo(() => new DeviceRecipeStore(window.localStorage), []);
+  const devicePhotos = useMemo(() => new IndexedDbPhotoStore(), []);
+  useEffect(() => { requestPersistence(); }, []);
   const [user, setUser] = useState<User | null | undefined>(supabase ? undefined : null);
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const readyStore = phase.kind === "ready" ? phase.kitchen.store : null;
+  const photos = useMemo<PhotoStore>(
+    () => (readyStore?.mode === "family" && supabase ? new SharedPhotoStore(supabase) : devicePhotos),
+    [readyStore, devicePhotos]);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -121,7 +130,7 @@ export function KitchenProvider({ children }: { children: ReactNode }) {
     );
   }
   return (
-    <KitchenContext.Provider value={{ ...phase.kitchen, deviceStore }}>
+    <KitchenContext.Provider value={{ ...phase.kitchen, deviceStore, photos }}>
       {children}
     </KitchenContext.Provider>
   );

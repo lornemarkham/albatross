@@ -3,23 +3,31 @@ import { Link, useSearchParams } from "react-router-dom";
 import { DownloadDeviceExport } from "../components/DownloadDeviceExport";
 import { primaryButton, secondaryButton } from "../components/ui";
 import { useKitchen } from "../context/KitchenContext";
+import { IndexedDbPhotoStore, bundleWithPhotos, importPhotos, photoIdsOf, type ExportedPhoto } from "../lib/photos";
 import { downloadBundle } from "../lib/download";
 import { parseImportFile, planImport, type ImportData, type ImportItem, type ImportResult } from "../lib/recipeModel";
 import { readDeviceData } from "../lib/recipeStorage";
 
 export function DataPage() {
-  const { store, deviceStore } = useKitchen();
+  const { store, deviceStore, photos } = useKitchen();
   const [params] = useSearchParams();
   const [items, setItems] = useState<ImportItem[] | null>(null);
   const [favs, setFavs] = useState<string[]>([]);
   const [source, setSource] = useState("");
+  // Photo bytes for the import: from the chosen file, or copied from this device.
+  const [filePhotos, setFilePhotos] = useState<ExportedPhoto[]>([]);
+  const [fromDevice, setFromDevice] = useState(false);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const shared = store.mode === "family";
 
-  async function preview(data: ImportData, from: string) {
+  async function preview(data: ImportData, from: string, device = false) {
     setError(null);
+    setPhotoNote(null);
+    setFilePhotos(data.photos);
+    setFromDevice(device);
     setResult(null);
     try {
       setItems(planImport(data, await store.existingKeys()));
@@ -33,7 +41,7 @@ export function DataPage() {
   function previewDevice() {
     const d = readDeviceData(window.localStorage);
     if (!d) { setError("There are no recipes saved in this browser."); return; }
-    preview({ recipes: d.recipes, entries: d.entries, favouriteRecipeIds: d.favouriteRecipeIds }, "this device");
+    preview({ recipes: d.recipes, entries: d.entries, favouriteRecipeIds: d.favouriteRecipeIds, photos: [] }, "this device", true);
   }
 
   useEffect(() => {
@@ -57,10 +65,27 @@ export function DataPage() {
     setBusy(true);
     setError(null);
     try {
-      setResult(await store.importItems(items, favs));
+      const res = await store.importItems(items, favs);
+      // Photos after records: a record never points at a photo that isn't stored.
+      const ids = new Set(photoIdsOf(items));
+      let copied = 0;
+      let lost = 0;
+      if (fromDevice) {
+        const dev = new IndexedDbPhotoStore();
+        for (const id of ids) {
+          const b = await dev.get(id);
+          if (!b) { lost++; continue; }
+          if (!(await photos.has(id))) { await photos.put(id, b); copied++; }
+        }
+      } else {
+        copied = await importPhotos(photos, filePhotos.filter((p) => ids.has(p.id)));
+        lost = [...ids].filter((id) => !filePhotos.some((p) => p.id === id)).length;
+      }
+      setPhotoNote(`${copied} photo${copied === 1 ? "" : "s"} added${lost ? `; ${lost} photo${lost === 1 ? " was" : "s were"} not in the file` : ""}.`);
+      setResult(res);
       // Re-plan so the list reflects what's there now; a second click adds nothing.
       setItems(planImport(
-        { recipes: items.map((i) => i.recipe), entries: items.flatMap((i) => i.newEntries), favouriteRecipeIds: favs },
+        { recipes: items.map((i) => i.recipe), entries: items.flatMap((i) => i.newEntries), favouriteRecipeIds: favs, photos: [] },
         await store.existingKeys(),
       ));
     } catch (e) {
@@ -82,12 +107,12 @@ export function DataPage() {
       <section className="mt-6 rounded-2xl border border-clay bg-cream p-5">
         <h2 className="font-semibold text-bark">Export</h2>
         <p className="mt-1 text-sm text-bark/70">
-          Downloads a JSON file of {shared ? "all family recipes and cooking history" : "every recipe and cooking entry saved in this browser"}.
+          Downloads one file with {shared ? "all family recipes, cooking history" : "every recipe, batch"} and all their photos.
           Keep it somewhere safe.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" className={primaryButton} onClick={async () => {
-            try { downloadBundle(await store.exportAll()); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+            try { downloadBundle(await bundleWithPhotos(store, photos)); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
           }}>
             {shared ? "Export family recipes" : "Export this device's recipes"}
           </button>
@@ -154,7 +179,7 @@ export function DataPage() {
         {result && (
           <p role="status" className="mt-4 rounded-xl bg-sage/10 p-3 text-sm text-bark">
             Imported {result.recipesAdded} recipe{result.recipesAdded === 1 ? "" : "s"} and {result.entriesAdded} cooking
-            entr{result.entriesAdded === 1 ? "y" : "ies"}. The original data on this device and in the file is unchanged.
+            entr{result.entriesAdded === 1 ? "y" : "ies"}. {photoNote} The original data on this device and in the file is unchanged.
           </p>
         )}
         {result && result.failed.length > 0 && (

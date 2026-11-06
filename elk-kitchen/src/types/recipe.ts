@@ -1,3 +1,31 @@
+// A photo kept with a recipe or a cook. The picture itself lives in the photo
+// store (src/lib/photos.ts) under this id; this is only the reference.
+export type PhotoRef = {
+  id: string;
+  caption: string;
+  addedAt: string;
+};
+
+export type RecipeKind = "general" | "jerky" | "sausage";
+
+// Jerky / sausage numbers. On a recipe they are the plan; on a cooking entry
+// they are what really happened. Everything is optional text or null so a
+// half-filled form still saves.
+export type MeatDetails = {
+  meatType: string;
+  meatWeightG: number | null;
+  fatPercent: number | null;
+  // One per line, e.g. "Salt 2%" — percent of meat weight.
+  seasoning: string;
+  marinade: string;
+  grinderPlate: string;
+  casing: string;
+  smokeTempC: number | null;
+  cookTempC: number | null;
+  internalTempC: number | null;
+  finishedWeightG: number | null;
+};
+
 // The reusable recipe: what you plan to make.
 export type Recipe = {
   id: string;
@@ -9,6 +37,10 @@ export type Recipe = {
   tags: string[];
   suggestedTags: string[];
   approxCalories: number | null;
+  kind: RecipeKind;
+  category: string;
+  photos: PhotoRef[];
+  details: MeatDetails;
   // Bumped on every save; an edit must name the version it started from.
   version: number;
   createdAt: string;
@@ -31,6 +63,13 @@ export type CookingEntry = {
   improveNextTime: string;
   notes: string;
   rating: number | null;
+  photos: PhotoRef[];
+  equipment: string;
+  // Temperatures and times as they happened, e.g. "Smoker 70°C, 3 h".
+  timesAndTemps: string;
+  yieldNote: string;
+  tastingNotes: string;
+  details: MeatDetails;
   createdAt: string;
   // True when the current person recorded it (and so may remove it).
   mine: boolean;
@@ -38,7 +77,7 @@ export type CookingEntry = {
 
 export type RecipeInput = Pick<
   Recipe,
-  "title" | "authorName" | "ingredients" | "instructions" | "notes" | "tags" | "suggestedTags" | "approxCalories"
+  "title" | "authorName" | "ingredients" | "instructions" | "notes" | "tags" | "suggestedTags" | "approxCalories" | "kind" | "category" | "photos" | "details"
 >;
 
 export type CookingEntryInput = Omit<CookingEntry, "id" | "recipeId" | "createdAt" | "mine">;

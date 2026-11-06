@@ -6,6 +6,7 @@
 // server-side from the sign-in token sent here. Nothing in this file saves
 // anything: the draft goes to the recipe form, and the person saves it.
 
+import { blankDetails } from "../meat";
 import type { RecipeInput } from "../../types/recipe";
 
 // What /api/extract returns for `kind: "recipe"` (api/_extract-recipe.ts in ELK Inventory).
@@ -80,6 +81,10 @@ export function toRecipeDraft(x: ExtractedRecipe, capturedBy: string): RecipeInp
     tags: [],
     suggestedTags: x.tags,
     approxCalories: null,
+    kind: "general",
+    category: "",
+    photos: [],
+    details: blankDetails(),
   };
 }
 

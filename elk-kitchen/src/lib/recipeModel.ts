@@ -1,4 +1,6 @@
-import type { CookingEntry, LegacyRecipe, Recipe } from "../types/recipe";
+import type { CookingEntry, LegacyRecipe, PhotoRef, Recipe, RecipeKind } from "../types/recipe";
+import { blankDetails, normalizeDetails } from "./meat";
+import type { ExportedPhoto } from "./photos";
 
 // ── Legacy (browser-only) recipes ────────────────────────────────────────────
 
@@ -38,6 +40,10 @@ export function legacyToRecipe(raw: unknown, now: string): { recipe: Recipe; ent
     tags: l.tags,
     suggestedTags: l.suggestedTags ?? [],
     approxCalories: l.approxCalories > 0 ? Math.round(l.approxCalories) : null,
+    kind: "general",
+    category: "",
+    photos: [],
+    details: blankDetails(),
     version: 1,
     createdAt: now,
     updatedAt: now,
@@ -56,6 +62,12 @@ export function legacyToRecipe(raw: unknown, now: string): { recipe: Recipe; ent
         improveNextTime: l.improveNextTime,
         notes: "",
         rating: l.rating > 0 ? Math.min(10, l.rating) : null,
+        photos: [],
+        equipment: "",
+        timesAndTemps: "",
+        yieldNote: "",
+        tastingNotes: "",
+        details: blankDetails(),
         createdAt: now,
         mine: true,
       }]
@@ -80,12 +92,17 @@ export type ExportBundle = {
   favouriteRecipeIds: string[];
   // Whatever the old app had stored in this browser, untouched.
   legacyBrowserRecipes?: unknown[];
+  // The pictures themselves, so a backup is complete on its own.
+  photos?: ExportedPhoto[];
+  // Photos a record points to that couldn't be found when exporting.
+  missingPhotoIds?: string[];
 };
 
 export type ImportData = {
   recipes: Recipe[];
   entries: CookingEntry[];
   favouriteRecipeIds: string[];
+  photos: ExportedPhoto[];
 };
 
 export function exportFileName(bundle: ExportBundle): string {
@@ -119,6 +136,8 @@ export function parseImportFile(text: string, now: string): ImportData {
     recipes,
     entries,
     favouriteRecipeIds: (Array.isArray(b.favouriteRecipeIds) ? b.favouriteRecipeIds : []).map(String),
+    photos: (Array.isArray(b.photos) ? b.photos : []).filter(
+      (p): p is ExportedPhoto => !!p && typeof p.id === "string" && typeof p.data === "string" && typeof p.mime === "string"),
   };
   // Legacy records carried inside the export that never made it into `recipes`.
   if (Array.isArray(b.legacyBrowserRecipes)) {
@@ -135,7 +154,7 @@ export function parseImportFile(text: string, now: string): ImportData {
 }
 
 function fromLegacyArray(items: unknown[], now: string): ImportData {
-  const out: ImportData = { recipes: [], entries: [], favouriteRecipeIds: [] };
+  const out: ImportData = { recipes: [], entries: [], favouriteRecipeIds: [], photos: [] };
   for (const raw of items) {
     const { recipe, entries } = legacyToRecipe(raw, now);
     if (!recipe.id || !recipe.title.trim()) continue;
@@ -149,6 +168,14 @@ const str = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : String
 const strList = (v: unknown) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
 const numOrNull = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
+export function normalizePhotos(v: unknown, now: string): PhotoRef[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((p) => {
+    const o = (p ?? {}) as Record<string, unknown>;
+    return typeof o.id === "string" && o.id ? [{ id: o.id, caption: str(o.caption), addedAt: str(o.addedAt) || now }] : [];
+  });
+}
+
 export function normalizeRecipe(raw: unknown, now: string): Recipe {
   const r = (raw ?? {}) as Record<string, unknown>;
   return {
@@ -161,6 +188,10 @@ export function normalizeRecipe(raw: unknown, now: string): Recipe {
     tags: strList(r.tags),
     suggestedTags: strList(r.suggestedTags),
     approxCalories: numOrNull(r.approxCalories),
+    kind: (["general", "jerky", "sausage"] as RecipeKind[]).includes(r.kind as RecipeKind) ? (r.kind as RecipeKind) : "general",
+    category: str(r.category),
+    photos: normalizePhotos(r.photos, now),
+    details: normalizeDetails(r.details),
     version: typeof r.version === "number" ? r.version : 1,
     createdAt: str(r.createdAt) || now,
     updatedAt: str(r.updatedAt) || now,
@@ -181,6 +212,12 @@ export function normalizeEntry(raw: unknown, now: string): CookingEntry {
     improveNextTime: str(e.improveNextTime),
     notes: str(e.notes),
     rating: numOrNull(e.rating),
+    photos: normalizePhotos(e.photos, now),
+    equipment: str(e.equipment),
+    timesAndTemps: str(e.timesAndTemps),
+    yieldNote: str(e.yieldNote),
+    tastingNotes: str(e.tastingNotes),
+    details: normalizeDetails(e.details),
     createdAt: str(e.createdAt) || now,
     mine: true,
   };

@@ -67,6 +67,11 @@ COMMENT ON TABLE public.kitchen_recipes IS 'elk-kitchen: shared family recipes.'
 -- v2: "Delete" in the app hides a recipe (removed_at) instead of destroying it.
 ALTER TABLE public.kitchen_recipes ADD COLUMN IF NOT EXISTS removed_at TIMESTAMPTZ;
 ALTER TABLE public.kitchen_recipes ADD COLUMN IF NOT EXISTS removed_by UUID;
+-- v3: photos, kind (jerky/sausage), category and meat details, as one JSON
+-- column. Additive: existing rows get '{}', nothing is dropped or rewritten.
+ALTER TABLE public.kitchen_recipes ADD COLUMN IF NOT EXISTS extra JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.kitchen_recipes DROP CONSTRAINT IF EXISTS kitchen_recipes_extra_size;
+ALTER TABLE public.kitchen_recipes ADD CONSTRAINT kitchen_recipes_extra_size CHECK (length(extra::text) <= 200000);
 ALTER TABLE public.kitchen_recipes DROP CONSTRAINT IF EXISTS kitchen_recipes_created_by_fkey;
 ALTER TABLE public.kitchen_recipes DROP CONSTRAINT IF EXISTS kitchen_recipes_updated_by_fkey;
 
@@ -150,6 +155,10 @@ CREATE TABLE IF NOT EXISTS public.kitchen_cooking_entries (
   created_by         UUID DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- v3: batch photos, equipment, times/temps, yield, tasting notes, meat details.
+ALTER TABLE public.kitchen_cooking_entries ADD COLUMN IF NOT EXISTS extra JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.kitchen_cooking_entries DROP CONSTRAINT IF EXISTS kitchen_cooking_entries_extra_size;
+ALTER TABLE public.kitchen_cooking_entries ADD CONSTRAINT kitchen_cooking_entries_extra_size CHECK (length(extra::text) <= 200000);
 COMMENT ON TABLE public.kitchen_cooking_entries IS 'elk-kitchen: each time someone cooked a recipe.';
 CREATE INDEX IF NOT EXISTS kitchen_cooking_entries_recipe_idx ON public.kitchen_cooking_entries (recipe_id, cooked_on DESC);
 

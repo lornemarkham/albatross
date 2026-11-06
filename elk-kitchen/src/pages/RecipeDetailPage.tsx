@@ -4,8 +4,11 @@ import { PantryCheck } from "../components/PantryCheck";
 import { TagChips } from "../components/TagChips";
 import { primaryButton, secondaryButton, sectionLabel } from "../components/ui";
 import { useKitchen } from "../context/KitchenContext";
+import { PhotoGallery } from "../components/Photos";
+import { DetailsSummary, FoodSafetyPanel, SafetyNotes } from "../components/MeatFields";
+import { safetyChecks } from "../lib/meat";
 import { useLoad } from "../lib/useLoad";
-import type { CookingEntry } from "../types/recipe";
+import type { CookingEntry, RecipeKind } from "../types/recipe";
 
 export function RecipeDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
@@ -63,6 +66,7 @@ export function RecipeDetailPage() {
           <div>
             <h1 className="text-2xl font-bold text-bark">{recipe.title}</h1>
             {recipe.authorName && <p className="mt-1 text-bark/70">by {recipe.authorName}</p>}
+            {(recipe.kind !== "general" || recipe.category) && <p className="mt-1 text-sm font-medium text-sage">{[recipe.kind !== "general" ? recipe.kind[0].toUpperCase() + recipe.kind.slice(1) : "", recipe.category].filter((x, i, a) => x && a.indexOf(x) === i).join(" · ")}</p>}
           </div>
           <div className="flex gap-2">
             <button
@@ -88,6 +92,9 @@ export function RecipeDetailPage() {
             <p className="mt-1 whitespace-pre-wrap text-bark">{lastAdvice.improveNextTime}</p>
           </div>
         )}
+
+        {recipe.photos.length > 0 && <div className="mt-5"><PhotoGallery photos={recipe.photos} /></div>}
+        {recipe.kind !== "general" && <div className="mt-5 rounded-xl border border-clay bg-white/60 p-4"><DetailsSummary kind={recipe.kind} d={recipe.details} /></div>}
 
         {recipe.tags.length > 0 && (
           <div className="mt-5">
@@ -121,10 +128,12 @@ export function RecipeDetailPage() {
         )}
       </article>
 
+      <FoodSafetyPanel kind={recipe.kind} />
+
       <section className="mt-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-bold text-bark">Cooking history</h2>
-          <Link to={`/recipe/${encodeURIComponent(recipe.id)}/cook`} className={primaryButton}>Record a cook</Link>
+          <h2 className="text-xl font-bold text-bark">{recipe.kind === "general" ? "Cooking history" : "Batches"}</h2>
+          <Link to={`/recipe/${encodeURIComponent(recipe.id)}/cook`} className={`${primaryButton} min-h-12`}>{recipe.kind === "general" ? "Record a cook" : "Record a batch"}</Link>
         </div>
         {entries.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-dashed border-clay bg-cream/50 p-6 text-center text-bark/70">
@@ -136,6 +145,7 @@ export function RecipeDetailPage() {
               <li key={e.id}>
                 <EntryCard
                   entry={e}
+                  kind={recipe.kind}
                   busy={busy}
                   onRemove={() => {
                     if (window.confirm(`Remove the cooking entry from ${e.cookedOn || "an unknown date"}? This can't be undone.`)) {
@@ -152,7 +162,7 @@ export function RecipeDetailPage() {
   );
 }
 
-function EntryCard({ entry: e, busy, onRemove }: { entry: CookingEntry; busy: boolean; onRemove: () => void }) {
+function EntryCard({ entry: e, kind, busy, onRemove }: { entry: CookingEntry; kind: RecipeKind; busy: boolean; onRemove: () => void }) {
   return (
     <article className="rounded-2xl border border-clay bg-cream p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -162,7 +172,15 @@ function EntryCard({ entry: e, busy, onRemove }: { entry: CookingEntry; busy: bo
         </p>
         {e.rating != null && <p className="text-sm text-bark/80">★ {e.rating}/10</p>}
       </div>
+      {e.photos.length > 0 && <div className="mt-3"><PhotoGallery photos={e.photos} /></div>}
+      {kind !== "general" && (
+        <div className="mt-3"><DetailsSummary kind={kind} d={e.details} /><div className="mt-2"><SafetyNotes notes={safetyChecks(kind, e.details)} /></div></div>
+      )}
       <dl className="mt-3 space-y-3 text-sm">
+        <Field label="Equipment" text={e.equipment} small />
+        <Field label="Temperatures & times" text={e.timesAndTemps} small />
+        <Field label="Finished yield" text={e.yieldNote} small />
+        <Field label="Tasting notes" text={e.tastingNotes} small />
         <Field label="Actually used" text={e.ingredientsUsed} small />
         <Field label="Substitutions & changes" text={e.substitutions} small />
         <Field label="Family reaction" text={e.familyReaction} small />

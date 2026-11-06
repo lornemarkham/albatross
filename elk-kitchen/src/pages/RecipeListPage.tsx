@@ -10,12 +10,14 @@ import type { RecipeSummary } from "../types/recipe";
 
 // Matches every word typed, anywhere in the title, ingredients, tags, author or notes.
 export function matchesSearch(r: RecipeSummary, q: string): boolean {
-  const hay = [r.title, r.authorName, r.ingredients, r.tags.join(" "), r.notes].join("\n").toLowerCase();
+  const hay = [r.title, r.authorName, r.ingredients, r.tags.join(" "), r.notes, r.category, r.kind === "general" ? "" : r.kind].join("\n").toLowerCase();
   return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
 }
 
 const ACTIONS: { to: string; icon: string; label: string; sub: string }[] = [
   { to: "/ideas", icon: "🍲", label: "What should we cook?", sub: "Ideas from your recipes" },
+  { to: "/add?kind=jerky", icon: "🥩", label: "New jerky recipe", sub: "Weights, cure, temps" },
+  { to: "/add?kind=sausage", icon: "🌭", label: "New sausage recipe", sub: "Grind, casing, smoke" },
   { to: "/add/photo", icon: "📷", label: "Photograph a recipe", sub: "Card, book or note" },
   { to: "/add", icon: "✍️", label: "Type a recipe", sub: "Add it by hand" },
   { to: "/pantry", icon: "🥫", label: "What's in the pantry?", sub: "From ELK Inventory" },
@@ -38,7 +40,7 @@ export function RecipeListPage() {
 
   const shown = (recipes ?? []).filter((r) => (!onlyFavourites || r.favourite) && matchesSearch(r, q));
   // Photo reading and the pantry need the family account; /ideas works anywhere.
-  const actions = ACTIONS.filter((a) => member || a.to === "/ideas" || a.to === "/add");
+  const actions = ACTIONS.filter((a) => member || a.to === "/ideas" || a.to.startsWith("/add"));
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -50,7 +52,7 @@ export function RecipeListPage() {
         <Link to="/data" className={`${secondaryButton} shrink-0`}>Backup &amp; import</Link>
       </header>
 
-      <nav aria-label="Main actions" className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <nav aria-label="Main actions" className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {actions.map((a) => (
           <Link key={a.to} to={a.to}
             className={`flex flex-col gap-0.5 rounded-2xl border p-4 shadow-sm transition hover:shadow-md ${a.to === "/add/photo" ? "border-sage bg-sage text-white" : "border-clay bg-cream text-bark"}`}>

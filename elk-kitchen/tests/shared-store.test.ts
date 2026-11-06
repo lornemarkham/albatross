@@ -2,6 +2,7 @@
 // are enforced and tested in kitchen-sql.test.ts; this checks the app relies
 // on them correctly: edits name their base version, imports never overwrite,
 // and the client never sends fields the database owns.
+import { ENTRY_EXTRA, RECIPE_EXTRA } from "./defaults.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -42,7 +43,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   notes: "", tags: [], suggested_tags: [], approx_calories: null, legacy: null, version: 3,
   created_at: "2026-10-10T00:00:00Z", updated_at: "2026-10-10T00:00:00Z", ...over,
 });
-const input = { title: "Cheese Drawer Soup", authorName: "Lorne", ingredients: "Cheddar", instructions: "Blend", notes: "", tags: [], suggestedTags: [], approxCalories: null };
+const input = { title: "Cheese Drawer Soup", authorName: "Lorne", ingredients: "Cheddar", instructions: "Blend", notes: "", tags: [], suggestedTags: [], approxCalories: null, ...RECIPE_EXTRA };
 
 test("an edit only lands on the version it started from, and never sends version/authorship", async () => {
   const { client, calls } = fakeClient((c) =>
@@ -67,7 +68,7 @@ test("when someone else saved first, the edit reports a conflict with their vers
 test("imports are insert-if-absent by id, for recipes and their cooking entries", async () => {
   const { client, calls } = fakeClient((c) => ({ data: c.table === "kitchen_recipes" ? [{ id: "r1" }] : [{ id: "e1" }], error: null }));
   const recipe = { ...input, id: "r1", version: 1, createdAt: "", updatedAt: "", legacy: { title: "old" } };
-  const entry = { id: "e1", recipeId: "r1", cookedOn: "", cookName: "", ingredientsUsed: "", substitutions: "", familyReaction: "", improveNextTime: "", notes: "", rating: null, createdAt: "", mine: true };
+  const entry = { id: "e1", recipeId: "r1", cookedOn: "", cookName: "", ingredientsUsed: "", substitutions: "", familyReaction: "", improveNextTime: "", notes: "", rating: null, ...ENTRY_EXTRA, createdAt: "", mine: true };
   const items: ImportItem[] = [
     { recipe, newEntries: [entry], status: "new", selected: true },
     { recipe: { ...recipe, id: "r2" }, newEntries: [], status: "same-title", selected: false },

@@ -1,6 +1,7 @@
 // "What should we cook?" prototype — the honesty rules: nothing claimed
 // without evidence, reasons only from real data, simulated replies never
 // pretend, nutrition never invented.
+import { RECIPE_EXTRA } from "./defaults.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { pantryFit, possibleMatches, ingredientStatus } from "../src/prototype/ideas/pantryMatch";
@@ -23,7 +24,7 @@ const bowls = sampleById("burrito-bowls")!;
 
 const saved = (over: Partial<RecipeSummary>): RecipeSummary => ({
   id: "r1", title: "Kathy's Chili", authorName: "Kathy", ingredients: "2 cans black beans\n1 lb beef", instructions: "", notes: "",
-  tags: [], suggestedTags: [], approxCalories: null, version: 1, createdAt: TODAY, updatedAt: TODAY,
+  tags: [], suggestedTags: [], approxCalories: null, ...RECIPE_EXTRA, version: 1, createdAt: TODAY, updatedAt: TODAY,
   lastCookedOn: "", timesCooked: 0, favourite: false, ...over,
 });
 

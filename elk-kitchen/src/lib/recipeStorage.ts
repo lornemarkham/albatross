@@ -1,6 +1,7 @@
 import type {
   CookingEntry, CookingEntryInput, LegacyRecipe, Recipe, RecipeDetail, RecipeInput, RecipeSummary,
 } from "../types/recipe";
+import { normalizeDetails } from "./meat";
 import {
   EXPORT_APP, EXPORT_FORMAT, legacyToRecipe, newId, normTitle,
   type ExistingKeys, type ExportBundle, type ImportItem, type ImportResult,
@@ -66,6 +67,24 @@ export function keysOf(recipes: Recipe[], entries: { id: string }[]): ExistingKe
 // Written by the original app. Read for migration; never written or removed.
 export const LEGACY_KEY = "elk-kitchen-recipes";
 export const DEVICE_KEY = "elk-kitchen-device-v2";
+
+// Records saved before photos and batch details existed lack those fields.
+const withRecipeDefaults = (r: Recipe): Recipe => ({
+  ...r,
+  kind: r.kind ?? "general",
+  category: r.category ?? "",
+  photos: r.photos ?? [],
+  details: normalizeDetails(r.details),
+});
+const withEntryDefaults = (e: CookingEntry): CookingEntry => ({
+  ...e,
+  photos: e.photos ?? [],
+  equipment: e.equipment ?? "",
+  timesAndTemps: e.timesAndTemps ?? "",
+  yieldNote: e.yieldNote ?? "",
+  tastingNotes: e.tastingNotes ?? "",
+  details: normalizeDetails(e.details),
+});
 
 type DeviceData = { recipes: Recipe[]; entries: CookingEntry[]; favouriteRecipeIds: string[] };
 type KeyValueStorage = Pick<Storage, "getItem" | "setItem">;
@@ -133,7 +152,7 @@ export function readDeviceData(storage: KeyValueStorage, now = new Date().toISOS
     try {
       const d = JSON.parse(raw) as DeviceData;
       if (Array.isArray(d.recipes) && Array.isArray(d.entries)) {
-        return { recipes: d.recipes, entries: d.entries, favouriteRecipeIds: d.favouriteRecipeIds ?? [] };
+        return { recipes: d.recipes.map(withRecipeDefaults), entries: d.entries.map(withEntryDefaults), favouriteRecipeIds: d.favouriteRecipeIds ?? [] };
       }
     } catch { /* fall through to legacy; the unreadable value is left in place */ }
   }
@@ -256,7 +275,7 @@ export class DeviceRecipeStore implements RecipeStore {
     let entriesAdded = 0;
     for (const item of items.filter((x) => x.selected)) {
       if (!have.recipeIds.has(item.recipe.id)) {
-        d.recipes.push(item.recipe);
+        d.recipes.push(withRecipeDefaults(item.recipe));
         have.recipeIds.add(item.recipe.id);
         recipesAdded++;
         if (favouriteRecipeIds.includes(item.recipe.id) && !d.favouriteRecipeIds.includes(item.recipe.id)) {

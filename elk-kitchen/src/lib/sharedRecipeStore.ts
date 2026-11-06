@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CookingEntry, CookingEntryInput, Recipe, RecipeDetail, RecipeInput } from "../types/recipe";
-import { EXPORT_APP, EXPORT_FORMAT, newId, type ExportBundle, type ImportItem, type ImportResult } from "./recipeModel";
+import { normalizeDetails } from "./meat";
+import { EXPORT_APP, EXPORT_FORMAT, newId, normalizePhotos, type ExportBundle, type ImportItem, type ImportResult } from "./recipeModel";
 import { byNewestCook, keysOf, summarize, type RecipeStore, type UpdateResult } from "./recipeStorage";
 
 // Family recipes in the ELK Supabase project (supabase/kitchen.sql). Who may
@@ -9,17 +10,39 @@ import { byNewestCook, keysOf, summarize, type RecipeStore, type UpdateResult } 
 
 type RecipeRow = {
   id: string; title: string; author_name: string; ingredients: string; instructions: string; notes: string;
-  tags: string[]; suggested_tags: string[]; approx_calories: number | null; legacy: unknown;
+  tags: string[]; suggested_tags: string[]; approx_calories: number | null; legacy: unknown; extra: unknown;
   version: number; created_at: string; updated_at: string; removed_at: string | null;
 };
 type EntryRow = {
   id: string; recipe_id: string; cooked_on: string | null; cook_name: string; ingredients_used: string;
   substitutions: string; family_reaction: string; improve_next_time: string; notes: string;
-  rating: number | string | null; created_by: string | null; created_at: string;
+  rating: number | string | null; extra: unknown; created_by: string | null; created_at: string;
 };
 
-const RECIPE_COLS = "id,title,author_name,ingredients,instructions,notes,tags,suggested_tags,approx_calories,legacy,version,created_at,updated_at,removed_at";
-const ENTRY_COLS = "id,recipe_id,cooked_on,cook_name,ingredients_used,substitutions,family_reaction,improve_next_time,notes,rating,created_by,created_at";
+const RECIPE_COLS = "id,title,author_name,ingredients,instructions,notes,tags,suggested_tags,approx_calories,legacy,version,created_at,updated_at,removed_at,extra";
+const ENTRY_COLS = "id,recipe_id,cooked_on,cook_name,ingredients_used,substitutions,family_reaction,improve_next_time,notes,rating,extra,created_by,created_at";
+
+// Photos, kind, category and jerky/sausage details ride in one JSON column
+// (supabase/kitchen.sql, v3) so the tables stay additive-only.
+function recipeExtraOf(x: unknown): Pick<Recipe, "kind" | "category" | "photos" | "details"> {
+  const e = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+  const now = "";
+  return {
+    kind: e.kind === "jerky" || e.kind === "sausage" ? e.kind : "general",
+    category: typeof e.category === "string" ? e.category : "",
+    photos: normalizePhotos(e.photos, now),
+    details: normalizeDetails(e.details),
+  };
+}
+function entryExtraOf(x: unknown): Pick<CookingEntry, "photos" | "equipment" | "timesAndTemps" | "yieldNote" | "tastingNotes" | "details"> {
+  const e = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+  const s = (v: unknown) => (typeof v === "string" ? v : "");
+  return {
+    photos: normalizePhotos(e.photos, ""),
+    equipment: s(e.equipment), timesAndTemps: s(e.timesAndTemps), yieldNote: s(e.yieldNote), tastingNotes: s(e.tastingNotes),
+    details: normalizeDetails(e.details),
+  };
+}
 
 export const toRecipe = (r: RecipeRow): Recipe => ({
   id: r.id,
@@ -31,6 +54,7 @@ export const toRecipe = (r: RecipeRow): Recipe => ({
   tags: r.tags ?? [],
   suggestedTags: r.suggested_tags ?? [],
   approxCalories: r.approx_calories,
+  ...recipeExtraOf(r.extra),
   version: r.version,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
@@ -48,6 +72,7 @@ const recipeRow = (i: RecipeInput) => ({
   tags: i.tags,
   suggested_tags: i.suggestedTags,
   approx_calories: i.approxCalories,
+  extra: { kind: i.kind, category: i.category, photos: i.photos, details: i.details },
 });
 
 const entryRow = (recipeId: string, i: CookingEntryInput) => ({
@@ -60,6 +85,7 @@ const entryRow = (recipeId: string, i: CookingEntryInput) => ({
   improve_next_time: i.improveNextTime,
   notes: i.notes,
   rating: i.rating,
+  extra: { photos: i.photos, equipment: i.equipment, timesAndTemps: i.timesAndTemps, yieldNote: i.yieldNote, tastingNotes: i.tastingNotes, details: i.details },
 });
 
 // Supabase's API returns at most 1000 rows per request, silently. Page
@@ -111,6 +137,7 @@ export class SharedRecipeStore implements RecipeStore {
     improveNextTime: e.improve_next_time,
     notes: e.notes,
     rating: e.rating == null ? null : Number(e.rating),
+    ...entryExtraOf(e.extra),
     createdAt: e.created_at,
     mine: e.created_by === this.userId,
   });

@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { RecipeSummary } from "../types/recipe";
+import { PhotoImg } from "./Photos";
 import { TagChips } from "./TagChips";
 
 type Props = { recipe: RecipeSummary };
@@ -12,6 +13,10 @@ export function RecipeCard({ recipe }: Props) {
       to={`/recipe/${encodeURIComponent(recipe.id)}`}
       className="block rounded-2xl border border-clay/80 bg-cream p-5 shadow-sm transition hover:border-sage/40 hover:shadow-md"
     >
+      {recipe.photos[0] && <PhotoImg id={recipe.photos[0].id} className="mb-3 h-40 w-full rounded-xl" />}
+      {(recipe.kind !== "general" || recipe.category) && (
+        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-sage">{[recipe.kind !== "general" ? recipe.kind : "", recipe.category].filter((x, i, a) => x && a.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i).join(" · ")}</p>
+      )}
       <h2 className="text-lg font-semibold text-bark">
         {recipe.favourite && <span className="mr-1 text-amber-500" aria-label="Favourite">★</span>}
         {recipe.title}
