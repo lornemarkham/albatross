@@ -15,6 +15,10 @@ import type {
 import { newId } from "../recipeModel";
 import { requiredInternalC, seasoningLines } from "../meat";
 import { stepsFromText } from "../../prototype/ideas/cookSteps";
+import type { BatchPlan, Preferences } from "../../types/sausage";
+import { adviceFor, afterWeighing, parseProgress, planAnswer, STAGE_DOING, STAGE_LABEL } from "../sausage/stages";
+import { amountFor } from "../sausage/plan";
+import { blankPrefs } from "../sausage/preferences";
 import {
   TEMP_LABEL, convert, convertible, durationText, grams, parseCommand, qtySpoken, qtyText, quantityAt, round, tempText, toC, toF,
   type Command,
@@ -22,7 +26,7 @@ import {
 
 export type Result = { session: CookingSession; reply: string; stopListening?: boolean };
 
-export function newSession(args: { recipe: Recipe | null; title?: string; cookName: string; now: string; id?: string }): CookingSession {
+export function newSession(args: { recipe: Recipe | null; title?: string; cookName: string; now: string; id?: string; plan?: BatchPlan | null }): CookingSession {
   const at = args.now;
   return {
     format: 1,
@@ -42,6 +46,7 @@ export function newSession(args: { recipe: Recipe | null; title?: string; cookNa
     lastReply: "",
     awaitingNote: null,
     savedEntryId: null,
+    ...(args.plan ? { plan: args.plan, stageLog: [] } : {}),
   };
 }
 
@@ -133,7 +138,7 @@ export function resume(s: CookingSession): CookingSession {
 }
 
 // ── Speech in, reply out ─────────────────────────────────────────────────────
-type Context = { recipe: Recipe | null; source: "voice" | "typed"; now: string };
+type Context = { recipe: Recipe | null; source: "voice" | "typed"; now: string; prefs?: Preferences };
 
 export function hear(s0: CookingSession, text: string, ctx: Context): Result {
   const heard = text.trim();
@@ -141,8 +146,10 @@ export function hear(s0: CookingSession, text: string, ctx: Context): Result {
   const line: TranscriptLine = { id: newId(), at: ctx.now, text: heard, source: ctx.source, understood: "" };
   const s = { ...s0, transcript: [...s0.transcript, line] };
   const cmd = parseCommand(heard);
+  const progress = s.awaitingNote ? null : parseProgress(heard);
   const r = s.awaitingNote && !["stop", "no", "yes"].includes(cmd.kind)
     ? noted(s, s.awaitingNote, heard, ctx, line.id)
+    : progress ? stages(s, progress, ctx, line.id)
     : act(s, cmd, ctx, line.id);
   const understood = r.understood ?? r.reply;
   const transcript = r.session.transcript.map((l) => (l.id === line.id ? { ...l, understood } : l));
@@ -151,6 +158,29 @@ export function hear(s0: CookingSession, text: string, ctx: Context): Result {
 }
 
 type Inner = { session: CookingSession; reply: string; understood?: string; stopListening?: boolean };
+
+// "I've finished grinding the pork. Now I'm grinding the chicken." Kept as notes and in the stage log.
+function stages(s0: CookingSession, items: NonNullable<ReturnType<typeof parseProgress>>, ctx: Context, lineId: string): Inner {
+  let s = s0;
+  for (const p of items) {
+    const text = `${p.action === "finished" ? "Finished" : "Started"} ${STAGE_DOING[p.stage]}${p.subject ? `: ${p.subject}` : ""}`;
+    s = addNote(s, "observation", text, ctx.now, lineId);
+    s = { ...s, stageLog: [...(s.stageLog ?? []), { at: ctx.now, stage: p.stage, subject: p.subject, action: p.action }] };
+  }
+  const understood = items.map((p) => `${p.action === "finished" ? "Done" : "Now"}: ${STAGE_LABEL[p.stage]}${p.subject ? ` (${p.subject})` : ""}`).join("; ");
+  return { session: s, reply: adviceFor(items, s, ctx.prefs ?? s.plan?.prefs ?? blankPrefs()), understood };
+}
+
+// A planned cook: "how much salt?" from the plan's ratio and the meat weighed so far.
+function planScale(s: CookingSession, ingredient: string, amount: Qty): string | null {
+  if (!s.plan) return null;
+  const g = grams(amount);
+  const want = norm(ingredient);
+  const hit = s.plan.seasonings.find((x) => norm(x.name).includes(want) || want.includes(norm(x.name)));
+  if (g == null || !hit) return null;
+  const a = amountFor(hit, g);
+  return a.text ? `${hit.name}: ${a.text} for ${qtySpoken(amount)} of meat (from the approved plan's ratio).` : null;
+}
 
 const CATEGORY_WORD: Record<NoteCategory, string> = { observation: "Note", "next-time": "Note for next time", tasting: "Tasting note", equipment: "Equipment", substitution: "Substitution" };
 
@@ -193,7 +223,10 @@ function act(s: CookingSession, cmd: Command, ctx: Context, lineId: string): Inn
       const live = s.ingredients.filter((i) => !i.removed);
       return { session: s, reply: live.length ? `So far: ${live.map((i) => `${i.name}, ${qtySpoken(i.qty)}`).join("; ")}.` : "Nothing added yet." };
     }
-    case "add": return addIngredient(s, cmd.name, cmd.qty, ctx, lineId);
+    case "add": {
+      const r = addIngredient(s, cmd.name, cmd.qty, ctx, lineId);
+      return r.session.pending.length > s.pending.length ? r : { ...r, reply: r.reply + afterWeighing(r.session) };
+    }
     case "correct": return correct(s, cmd.target, cmd.qty, ctx, lineId);
     case "remove": {
       const ing = cmd.target ? findIngredient(s, cmd.target) : s.ingredients.find((i) => i.id === s.lastIngredientId && !i.removed) ?? null;
@@ -217,7 +250,7 @@ function act(s: CookingSession, cmd: Command, ctx: Context, lineId: string): Inn
       const now = Date.parse(ctx.now);
       return { session: s, reply: live.map((t) => `${t.label}: ${durationText(Math.max(0, Math.round((Date.parse(t.endsAt) - now) / 1000)))} left`).join(". ") + "." };
     }
-    case "scale": return { session: s, reply: scaleAnswer(ctx.recipe, cmd.ingredient, cmd.amount) };
+    case "scale": return { session: s, reply: planScale(s, cmd.ingredient, cmd.amount) ?? scaleAnswer(ctx.recipe, cmd.ingredient, cmd.amount) };
     case "temperature": {
       if (cmd.unit) return temperature(s, cmd.what, cmd.value, cmd.unit, ctx, lineId);
       const guess: TempUnit = cmd.value > 100 ? "F" : "C";
@@ -234,7 +267,7 @@ function act(s: CookingSession, cmd: Command, ctx: Context, lineId: string): Inn
       return { session: addNote(s, "substitution", text, ctx.now, lineId), reply: `Substitution noted: ${text.toLowerCase()}.`, understood: `Substitution: ${text}` };
     }
     case "scale-recipe": return { session: s, reply: scaleRecipe(ctx.recipe, cmd.factor), understood: `Recipe × ${cmd.factor} (read back, nothing changed)` };
-    case "question": return { session: s, reply: lookUp(ctx.recipe, cmd.text), understood: `Question: ${cmd.text}` };
+    case "question": return { session: s, reply: planAnswer(s, cmd.text) ?? lookUp(ctx.recipe, cmd.text), understood: `Question: ${cmd.text}` };
     case "note-prompt":
       return { session: { ...s, awaitingNote: cmd.category }, reply: cmd.category === "next-time" ? "Okay. What should we do differently next time?" : cmd.category === "tasting" ? "Okay. How does it taste?" : "Okay. What's the note?" };
   }
@@ -296,8 +329,9 @@ function temperature(s: CookingSession, what: TempWhat, value: number, unit: Tem
   const next = addTemperature(s, what, value, unit, ctx.now, lineId);
   let reply = `${TEMP_LABEL[what]} ${tempText(value, unit)} noted.`;
   const r = ctx.recipe;
-  if (what === "internal" && r && r.kind !== "general") {
-    const need = requiredInternalC(r.details.meatType);
+  if (what === "internal" && ((r && r.kind !== "general") || s.plan)) {
+    // A planned mix with chicken in it takes the poultry temperature.
+    const need = s.plan?.poultry ? 74 : requiredInternalC(r?.details.meatType ?? "");
     if (toC(value, unit) < need) reply += ` That's below the ${need} °C (${Math.round(toF(need, "C"))} °F) safe internal temperature.`;
   }
   return { session: next, reply, understood: `${TEMP_LABEL[what]}: ${tempText(value, unit)}` };
@@ -314,7 +348,7 @@ export function answer(s: CookingSession, pendingId: string, yes: boolean, now: 
     case "none": return { session: rest, reply: a.reply };
     case "set-ingredient": {
       const next = setIngredient(rest, { ingredientId: a.ingredientId, name: a.name, qty: a.why === "removed" ? null : a.qty, why: a.why, now, lineId: lineId ?? p.lineId });
-      const reply = a.why === "removed" ? `Removed ${a.name}.` : a.why === "said" ? `Added ${a.name}, ${qtySpoken(a.qty)}.` : `${cap(a.name)} is now ${qtySpoken(a.qty)}.`;
+      const reply = (a.why === "removed" ? `Removed ${a.name}.` : a.why === "said" ? `Added ${a.name}, ${qtySpoken(a.qty)}.` : `${cap(a.name)} is now ${qtySpoken(a.qty)}.`) + afterWeighing(next);
       return { session: next, reply };
     }
     case "temperature":

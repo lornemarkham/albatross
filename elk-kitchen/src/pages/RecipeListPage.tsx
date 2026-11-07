@@ -73,6 +73,9 @@ export function RecipeListPage() {
         <Link to="/cook" className="mt-4 flex min-h-16 items-center justify-center gap-3 rounded-2xl bg-tomato text-xl font-bold text-white shadow-lg transition hover:bg-tomato/90">
           <span aria-hidden className="text-2xl">🎤</span> Start cooking
         </Link>
+        <Link to="/plan" className="mt-3 flex min-h-14 items-center justify-center gap-2 rounded-2xl border border-butter/30 text-lg font-semibold text-butter transition hover:bg-butter/10">
+          <span aria-hidden>🌭</span> Sausage day: cook with what I bought
+        </Link>
       </section>
 
       {unsaved.length > 0 && <div className="mb-5"><ContinueCooking sessions={unsaved} /></div>}

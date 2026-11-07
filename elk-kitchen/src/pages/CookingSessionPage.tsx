@@ -9,6 +9,9 @@ import { clock, durationText, qtyText, quantityAt } from "../lib/cooking/parse";
 import { ingredientStory } from "../lib/cooking/summary";
 import { CookingJournal } from "../components/CookingJournal";
 import type { CookingSession, MediaRef, SessionIngredient } from "../types/cooking";
+import { loadPrefs as loadCookingPrefs } from "../lib/sausage/preferences";
+import { STAGES, STAGE_LABEL, STAGE_SAY, seasoningBasis, weighedMeat } from "../lib/sausage/stages";
+import { amountFor, gramsText } from "../lib/sausage/plan";
 
 const PREFS_KEY = "elk-kitchen-cooking-prefs-v1";
 type Prefs = { keepListening: boolean; speakReplies: boolean };
@@ -54,7 +57,7 @@ export function CookingSessionPage() {
   function respond(text: string, source: "voice" | "typed") {
     let out = { reply: "", stop: false };
     update((s) => {
-      const r = hear(s, text, { recipe: recipeRef.current ?? null, source, now: new Date().toISOString() });
+      const r = hear(s, text, { recipe: recipeRef.current ?? null, source, now: new Date().toISOString(), prefs: loadCookingPrefs(localStorage) });
       out = { reply: r.reply, stop: !!r.stopListening };
       return r.session;
     });
@@ -210,6 +213,8 @@ export function CookingSessionPage() {
             </div>
           </section>
         )}
+
+        {session.plan && <PlanPanel session={session} onSay={(t) => respond(t, "typed")} />}
 
         <Ingredients session={session} recipeIngredients={recipe?.ingredients ?? ""} update={update} />
 
@@ -410,4 +415,39 @@ function IngredientForm({ initial, onSave, onCancel, onRemove }: { initial: Sess
 
 function Shell({ children }: { children: ReactNode }) {
   return <div className="flex min-h-screen flex-col items-center justify-center bg-cocoa px-6 text-center">{children}</div>;
+}
+
+// Sausage day: the approved plan, the meat weighed so far and the seasonings
+// for that weight, plus one big button per stage for messy hands.
+function PlanPanel({ session, onSay }: { session: CookingSession; onSay: (text: string) => void }) {
+  const plan = session.plan!;
+  const w = weighedMeat(session, plan);
+  const basis = seasoningBasis(session, plan);
+  const done = new Set((session.stageLog ?? []).filter((x) => x.action === "finished").map((x) => x.stage));
+  return (
+    <section aria-label="Today's plan" className="rounded-2xl border border-saffron/50 bg-butter/10 p-4">
+      <p className="text-xs font-bold uppercase tracking-wide text-saffron">Today's plan · {plan.planTitle}</p>
+      <p className="mt-1 text-sm text-butter/80">{plan.meats.map((m) => `${m.name} ${gramsText(m.plannedG)}`).join(" · ")}</p>
+      <p className="mt-1 text-sm">{w.totalG ? `Weighed: ${gramsText(w.totalG)}${w.complete ? " ✓" : ` — still to weigh: ${w.missing.join(", ")}`}` : "Say each weight: “the pork weighs 3 kilos”."}</p>
+      {plan.seasonings.length > 0 && (
+        <ul className="mt-2 divide-y divide-butter/10">
+          {plan.seasonings.map((x) => {
+            const a = amountFor(x, basis.g);
+            return <li key={x.raw} className="flex justify-between gap-3 py-1.5"><span>{x.name}{x.cure ? " ⚠" : ""}</span><span className="font-mono text-xl font-bold tabular-nums">{a.text || "—"}</span></li>;
+          })}
+        </ul>
+      )}
+      <p className="mt-1 text-xs text-butter/60">For {basis.words}.</p>
+      <p className="mt-2 text-sm font-semibold">{plan.poultry ? "Contains chicken: cook to 74 °C (165 °F)." : "Cook to 71 °C (160 °F)."} Keep everything at 4 °C or colder.</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {STAGES.map((st) => (
+          <button key={st} type="button" onClick={() => onSay(STAGE_SAY[st])}
+            className={`min-h-14 rounded-xl border text-base font-semibold ${done.has(st) ? "border-saffron bg-saffron/25" : "border-butter/30"}`}>
+            {done.has(st) ? "✓ " : ""}{STAGE_LABEL[st]}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-xs text-butter/60">Tap a stage when it's done, or just say it: “I've finished grinding the pork, now the chicken.”</p>
+    </section>
+  );
 }

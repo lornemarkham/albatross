@@ -17,6 +17,35 @@ npm run typecheck
 npm run build
 ```
 
+## Sausage day: cook with what I bought (`/plan`)
+
+For batch meat days (built for the owner's 2026-11-07 cook: 15.5 kg of pork butt, beef eye of round and bone-in
+chicken thighs into four sausage recipes). Rules and arithmetic in `src/lib/sausage/*`, not AI.
+
+1. **What you bought**: paste label lines ("Pork butt 3.705 kg $31.45") or add by hand. Only what's written is
+   filled in; a missing weight or price stays blank. Usable meat and fat % are **typical estimates per cut**
+   (`cuts.ts`, labelled on screen) until you type a weighed usable weight or your own fat %. Bone-in chicken is
+   flagged: weigh it after boning.
+2. **What you're making**: pick sausage recipes. **Suggest a split** gives each meat to the recipes whose original
+   used that kind of meat, in the originals' proportions; every number is editable.
+3. **Per recipe**: the adaptation ("Pork butt in place of pork tenderloin + pork belly"), blended fat vs the recipe's
+   target (with grams of back fat to add if lean), every seasoning **in grams** for the meat weight (from "Salt 2%",
+   "18 g/kg", or amounts scaled from the recipe's own meat weight; spoon measures are scaled and flagged "weigh
+   once"), casing, food safety (74 °C with chicken in the mix, cure checked against the USDA 2.5 g/kg Cure #1
+   limit, hot-smoke only, fermented not guided), and meat cost (per kg usable, then per kg / sausage / serving
+   once finished numbers are entered; seasonings and casings aren't costed).
+4. **Do you have everything?**: tick what you have; the rest goes to **Pantry's** shopping list (shared mode) or is
+   copied (this-device mode). No second list.
+5. **Approve**: freezes today's adaptation per recipe. **Cook this** starts the cooking helper with it. The recipe
+   itself never changes; editing meat or recipes after approval asks for approval again.
+
+In the cook: "I've finished grinding the pork. Now I'm grinding the chicken." (stage + next instruction, using your
+grind preference), "the pork weighs 8.2 kilos" (seasonings redone for the real weight once all meat is weighed),
+"how much salt?", one big button per stage. The saved batch keeps the plan, weighed meat, seasonings, substitution
+and cost. **Preferences** (grind, plate, grams, goals) start blank and are edited on `/plan`. Plans and preferences
+are kept on this device (`elk-kitchen-sausage-plans-v1`, `elk-kitchen-preferences-v1`), not in backups yet; the
+batch record (which is backed up) carries the approved plan.
+
 ## The family cooking companion (`/tonight`, and the box at the top of the home page)
 
 Ask in plain words, typed or spoken (🎤 listens for **one** request after a tap, then stops):
@@ -79,8 +108,9 @@ OpenAI key, checks the sign-in token against `elk_is_family_member()` before
 touching it, and streams its answer so slow multi-page reads survive Vercel
 Edge's 25 s limit. The answer fills in the recipe form, with anything the
 model couldn't read listed above it; nothing is saved until the person
-presses Save. (The photos you take of a recipe card are only read, not kept;
-photos you attach to a recipe or a batch are stored — see below.) Kitchen's Vercel project has
+presses Save. Since M631 the card photos are also kept as the recipe's first photos ("Original card",
+removable in the form), so the handwriting stays next to what was read from it; anything the reader couldn't
+make out is listed above the form for you to confirm. Kitchen's Vercel project has
 no OpenAI key and needs none.
 
 ## ELK Pantry (`/pantry`, recipe pages, `/ideas`)

@@ -4,14 +4,17 @@ import { primaryButton, secondaryButton } from "../components/ui";
 import { useKitchen } from "../context/KitchenContext";
 import { supabase } from "../lib/supabase";
 import { extractRecipe, keepDraft, MAX_PHOTOS, preparePhotos, toRecipeDraft } from "../lib/capture/recipeCapture";
+import { addPhoto } from "../lib/photos";
+import type { PhotoRef } from "../types/recipe";
 
 type Page = { id: string; file: File; preview: string };
 
 // Photograph a recipe card → AI reads it → the recipe form, filled in, for a
-// person to check and save. Nothing is saved from here, and the photos are
-// only sent to the reader (never stored).
+// person to check and save. No recipe is saved from here. The card photos are
+// kept as the recipe's first photos ("Original card"), so the handwriting
+// stays with the recipe next to what was read from it.
 export function PhotoCapturePage() {
-  const { member, myName } = useKitchen();
+  const { member, myName, photos: photoStore } = useKitchen();
   const navigate = useNavigate();
   const [pages, setPages] = useState<Page[]>([]);
   const [busy, setBusy] = useState(false);
@@ -63,7 +66,18 @@ export function PhotoCapturePage() {
       }
       const result = await extractRecipe(photos, token);
       if (!result.ok) { setError(result.error); return; }
-      const draft = { draft: toRecipeDraft(result.recipe, myName), unclear: result.recipe.unclear, pages: pages.length };
+      // Keep the original card. If a photo can't be stored, the read recipe still goes through and says so.
+      const originals: PhotoRef[] = [];
+      for (const [i, p] of pages.entries()) {
+        try {
+          const ref = await addPhoto(photoStore, p.file);
+          originals.push({ ...ref, caption: `Original card${pages.length > 1 ? `, page ${i + 1}` : ""}` });
+        } catch { /* reported below */ }
+      }
+      const unclear = originals.length < pages.length
+        ? [...result.recipe.unclear, `${pages.length - originals.length} of the card photos couldn't be kept — add them under Photos.`]
+        : result.recipe.unclear;
+      const draft = { draft: { ...toRecipeDraft(result.recipe, myName), photos: originals }, unclear, pages: pages.length };
       keepDraft(window.sessionStorage, draft);
       navigate("/add?from=photo", { state: draft });
     } finally {
@@ -136,7 +150,8 @@ export function PhotoCapturePage() {
         <Link to="/add" className={`${secondaryButton} w-full text-center sm:w-auto`}>Type it instead</Link>
       </div>
       <p className="mt-4 text-xs text-bark/55">
-        Photos are sent to OpenAI to be read, through ELK's family-only reader, and ELK doesn't keep them. The reader copies
+        Photos are sent to OpenAI to be read, through ELK's family-only reader; OpenAI isn't asked to keep them. Kitchen keeps
+        them with the recipe as the original card (remove them in the form if you'd rather not). The reader copies
         what's written and lists anything it couldn't read — it's told not to fill in missing amounts.
       </p>
     </div>

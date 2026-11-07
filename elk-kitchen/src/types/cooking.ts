@@ -1,3 +1,5 @@
+import type { BatchPlan } from "./sausage";
+
 // A cooking session: what happened while someone cooked, as it happened.
 // Kitchen owns it. It is saved inside the batch (cooking entry) it produces,
 // so it shares that record's storage, backups and family-only rules.
@@ -114,4 +116,8 @@ export type CookingSession = {
   awaitingNote: NoteCategory | null;
   // Set once the session has been saved as a batch.
   savedEntryId: string | null;
+  // Sausage day: the approved adaptation this cook follows (the recipe itself is unchanged).
+  plan?: BatchPlan | null;
+  // "Finished grinding the pork", "now grinding the chicken", in order.
+  stageLog?: { at: string; stage: string; subject: string; action: "started" | "finished" }[];
 };

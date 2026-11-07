@@ -286,6 +286,13 @@ export function parseCommand(input: string): Command {
   const equipQty = equip ? quantityAt(equip[1]) : null;
   if (equip && (!equipQty || !equipQty.qty.unit)) return { kind: "note", category: "equipment", text: capital(stripEnd(equip[1])) };
 
+  // Weighed amounts: "the pork weighs 8.2 kilos", "chicken came to 1.9 kg".
+  const weighs = bare.match(/^(?:the\s+|my\s+)?(.+?)\s+(?:weighs(?: in at)?|weighed|came (?:out )?to|comes (?:out )?to|is|was)\s+(\d.*)$/);
+  if (weighs && !/^(that|it|this|the last one)$/.test(weighs[1])) {
+    const q = quantityAt(weighs[2]);
+    if (q && !q.rest && grams(q.qty) != null) return { kind: "add", name: tidyName(weighs[1]), qty: q.qty };
+  }
+
   // Ingredients: "add 40 grams of salt", "I added 2 kg pork", "40 g salt", "add salt, 40 grams".
   const add = bare.match(/^(?:and\s+)?(?:please\s+)?(?:add|added|adding|i added|used|using|i used|i'?m using|i'?m adding|i'?ve added|we added|put in|i put in|throw in|threw in|mix in|mixed in|in goes|plus)\s+(.+)$/);
   const body = add ? add[1] : bare;

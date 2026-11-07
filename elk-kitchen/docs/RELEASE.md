@@ -1,6 +1,10 @@
 # Releasing ELK Kitchen
 
-**Status (2026-11-07, M629):** Kitchen has **no approved release path yet**. Nothing here authorises a deploy.
+**Status (2026-11-07, M631):** M631 (Sausage day, `/plan`) is committed on `kitchen-shopping-list` on top of M629. It is
+not pushed or deployed. It works in this-device mode, so it can ship without any SQL. Same release steps as below.
+Tests: 154.
+
+**Earlier status (M629):** Kitchen has **no approved release path yet**. Nothing here authorises a deploy.
 Production (deployed in M622 from `7aac18c`) is this-device mode. M629's family companion is committed locally on
 `kitchen-shopping-list`, not pushed or deployed. The family-pilot runbook is at the end of this file.
 

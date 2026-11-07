@@ -6,6 +6,9 @@ import type { CookingEntryInput, MeatDetails, PhotoRef, Recipe, RecipeInput } fr
 import type { CookingSession, SessionEvent, SessionIngredient } from "../../types/cooking";
 import { blankDetails } from "../meat";
 import { TEMP_LABEL, durationText, grams, qtyText, quantityAt, tempText, toC } from "./parse";
+import type { BatchPlan } from "../../types/sausage";
+import { seasoningBasis, weighedMeat } from "../sausage/stages";
+import { amountFor, gramsText } from "../sausage/plan";
 
 export const timeOf = (iso: string) => {
   const d = new Date(iso);
@@ -88,12 +91,22 @@ export function batchFromSession(s: CookingSession, recipe: Recipe | null): Batc
     : blankDetails();
   const meat = recipe && recipe.kind !== "general" && recipe.details.meatType.trim() ? findMeat(s, recipe.details.meatType) : null;
   if (meat?.qty) { const g = grams(meat.qty); if (g != null) details.meatWeightG = Math.round(g); }
+  // Sausage day: the approved plan's meat and fat, and the weight actually said.
+  const plan = s.plan ?? null;
+  if (plan) {
+    const w = weighedMeat(s, plan);
+    details.meatType = plan.meats.map((m) => m.name).filter((n, i, a) => a.indexOf(n) === i).join(", ");
+    details.meatWeightG = w.complete ? Math.round(w.totalG) : details.meatWeightG ?? plan.plannedMeatG;
+    if (plan.fatPercent != null) details.fatPercent = Math.round(plan.fatPercent * 10) / 10;
+  }
+  const planLines = plan ? planSummary(s, plan) : [];
   const start = timeOf(s.startedAt), end = s.endedAt ? timeOf(s.endedAt) : "";
   return {
     cookedOn: dateOf(s.startedAt),
     cookName: s.cookName,
     ingredientsUsed: clip(lines.join("\n"), LIMIT.ingredientsUsed),
     substitutions: clip([
+      ...(plan?.substitutions ?? []),
       ...notes(s, "substitution").map((n) => n.text),
       ...(extra.length ? [`Not in the written recipe: ${extra.join(", ")}`] : []),
     ].join("\n"), LIMIT.other),
@@ -101,6 +114,7 @@ export function batchFromSession(s: CookingSession, recipe: Recipe | null): Batc
     improveNextTime: clip(notes(s, "next-time").map((n) => n.text).join("\n"), LIMIT.other),
     notes: clip([
       `Cooking session ${start}${end ? `–${end}` : ""}, ${s.transcript.length} thing${s.transcript.length === 1 ? "" : "s"} said or typed.`,
+      ...planLines,
       ...notes(s, "observation").map((n) => `${timeOf(n.at)} ${n.text}`),
     ].join("\n"), LIMIT.other),
     rating: null,
@@ -111,6 +125,19 @@ export function batchFromSession(s: CookingSession, recipe: Recipe | null): Batc
     tastingNotes: clip(notes(s, "tasting").map((n) => n.text).join("\n"), LIMIT.other),
     details,
   };
+}
+
+// What the plan said, kept with the batch so it can be repeated: meat, fat, seasonings for the real weight, cost.
+export function planSummary(s: CookingSession, plan: BatchPlan): string[] {
+  const w = weighedMeat(s, plan);
+  const basis = seasoningBasis(s, plan);
+  const fat = plan.fatPercent != null ? `, about ${Math.round(plan.fatPercent)}% fat${plan.meats.some((m) => m.fatEstimated) ? " (estimated)" : ""}` : "";
+  return [
+    `Planned (${plan.planTitle}, approved by ${plan.approvedBy || "the cook"}): ${plan.meats.map((m) => `${m.name} ${gramsText(m.plannedG)}`).join(", ")} = ${gramsText(plan.plannedMeatG)}${fat}.`,
+    w.totalG ? `Weighed: ${gramsText(w.totalG)}${w.complete ? "" : ` (not weighed: ${w.missing.join(", ")})`}.` : "Meat weight not said during the cook.",
+    `Seasonings for ${basis.words}: ${plan.seasonings.map((x) => `${x.name} ${amountFor(x, basis.g).text || "(no amount)"}`).join("; ")}.`,
+    ...(plan.meatCost != null ? [`Meat cost: $${plan.meatCost.toFixed(2)} (seasonings and casings not counted).`] : []),
+  ];
 }
 
 function findMeat(s: CookingSession, meatType: string): SessionIngredient | null {
