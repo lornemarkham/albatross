@@ -17,7 +17,55 @@ npm run typecheck
 npm run build
 ```
 
-**What should we cook?** is at `/ideas`, in every build (read-only; its
+## The family cooking companion (`/tonight`, and the box at the top of the home page)
+
+Ask in plain words, typed or spoken (🎤 listens for **one** request after a tap, then stops):
+"What should we cook tonight?", "What can I make with what we have?", "We need to use the leftover chicken",
+"What's going bad soon?", "Give me three dinner ideas the family will like", "Add cream to the shopping list",
+"We're out of onions". Kitchen's own rules (`src/lib/companion/*`, not AI) rank the **family's recipes**:
+
+- **✓ Pantry**: what ELK Pantry shows, with Pantry's own count, place and best-before date (every open batch).
+  "Use soon" comes from best-before dates; leftovers are Pantry products named "leftover…" or after a family recipe.
+- **🗣 You said**: ingredients mentioned in the request. They're never treated as stock.
+- **★ Family**: only what people recorded: each person's dinner ratings, "make it again?", favourites and the last
+  "next time" note.
+- **⚠**: someone's food notes say they avoid an ingredient on the list, the dish was made in the last 3 days, or
+  someone said "not again". Diet words (vegetarian, vegan, gluten-free, dairy-free) and "no X" are firm rules. When
+  nothing fits, Kitchen loosens them one at a time and says which.
+- **Shopping?**: Pantry shows none left (ticked), or Pantry doesn't know (unticked; never assumed missing).
+
+Shopping requests open a list you can edit and tick before anything is sent. It goes to **Pantry's** shopping list
+through `pantry_shopping_add`: "manual" for things you asked for, "recipe" with "for <title>" for a recipe's
+missing items. Duplicates already on the open list are skipped. If Pantry still shows some, the line says so.
+Kitchen never changes stock from here.
+
+**Food notes** (on `/tonight`): each person writes what they avoid and like. In shared mode only the person can write
+their own notes, and the family can read them. Kitchen flags; it is not an allergy check.
+
+**✨ AI second opinion** (optional, shared mode only, switched off until the owner adds a key): see
+[`docs/decisions/0001-kitchen-ai-endpoint.md`](docs/decisions/0001-kitchen-ai-endpoint.md). It picks only among the
+family's recipes it was sent, its words are labelled AI, and Pantry facts on the page always come from Pantry.
+
+## Family dinner feedback ("How was dinner?" on each batch's journal)
+
+Everyone who ate leaves their own rating (0–10), comment, photos, "make it again?" (yes / maybe / no) and one thing
+to change, and can mark the recipe a favourite. The cook is taken there after saving a cooking session.
+
+- **Shared mode** (`kitchen.sql` v5, `kitchen_meal_feedback`): one say per person per dinner, under their name on the
+  family list. Only they can change it, and every change keeps the earlier answer (`history`). Nothing can be deleted
+  through the API. A dinner others have rated can't be removed by the cook.
+- **This phone**: type who it's from. Several people can rate on one phone. **Backup & import** carries the feedback
+  and the food notes. Importing into shared mode keeps each rating under the name typed on the phone, marked
+  "brought in from its backup", read-only, once.
+
+## Cooking companion additions (Start cooking)
+
+Besides the commands below: "I used butter instead of oil" / "swapped the oil for butter" (kept as the batch's
+substitution; amounts don't change), "double the recipe" / "half the recipe" (reads the recipe's own amounts back
+scaled, and changes nothing), and questions like "what goes in the dressing?" or "which plate do I grind through?"
+(answered from the recipe's own text, or "the recipe doesn't say").
+
+**What should we cook?** (the older prototype) is at `/ideas`, in every build (read-only; its
 example ideas and keyword replies are labelled as such on the page). See
 [`docs/prototypes/WHAT-SHOULD-WE-COOK.md`](docs/prototypes/WHAT-SHOULD-WE-COOK.md).
 
@@ -78,7 +126,8 @@ Sign-in is the same email link as Inventory. There are no passwords.
    → Export**.
 3. Supabase Dashboard → SQL Editor: paste and run all of `supabase/kitchen.sql`.
    It creates only `kitchen_recipes`, `kitchen_cooking_entries`,
-   `kitchen_favourites` and `kitchen_recipe_revisions`. It stops without
+   `kitchen_favourites`, `kitchen_recipe_revisions`, and (v5) `kitchen_meal_feedback`
+   and `kitchen_member_profiles`. It stops without
    changes if a table with one of those names exists that it didn't create.
    It's safe to re-run.
 4. Supabase → Authentication → URL Configuration → **Redirect URLs**: add the
@@ -243,7 +292,7 @@ kept as audio and aren't transcribed. Clips and voice notes in shared mode need 
   import** writes one JSON file that includes the photos, and restoring it adds
   without overwriting. Take a backup after each cook until the shared database
   is switched on.
-- **Shared mode** needs, in order: `kitchen.sql` (v3 adds an `extra` JSON column
+- **Shared mode** needs, in order: `kitchen.sql` (v5 adds family dinner feedback and food notes; v3 adds an `extra` JSON column
   to the recipe and batch tables; v4 lets a batch's `extra` hold a cooking session, up to
   1 000 000 characters; additive, re-runnable), then
   `kitchen-photos.sql` (v2: private `kitchen-photos` bucket for photos, clips and voice

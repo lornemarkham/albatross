@@ -213,3 +213,41 @@ test("session media are included in backups", () => {
   s = { ...s, events: [...s.events, { id: "e1", at: T0, kind: "media", media: { id: "v1.webm", type: "video", mime: "video/webm", caption: "", addedAt: T0, finished: false } }] };
   assert.deepEqual(sessionMediaIds(s), ["v1.webm"]);
 });
+
+test("cooking companion: substitutions are recorded and land in the batch's substitutions", () => {
+  assert.deepEqual(parseCommand("I used butter instead of olive oil"), { kind: "substitution", used: "butter", insteadOf: "olive oil" });
+  assert.deepEqual(parseCommand("Swapped the hog casings for sheep casings"), { kind: "substitution", used: "sheep casings", insteadOf: "hog casings" });
+  assert.deepEqual(parseCommand("We're out of garlic so I used garlic powder"), { kind: "substitution", used: "garlic powder", insteadOf: "garlic" });
+  let s = newSession({ recipe: sausage, cookName: "Lorne", now: T0 });
+  const r = say(s, "Substitute smoked paprika for black pepper", 1);
+  s = r.session;
+  assert.equal(r.reply, "Substitution noted: smoked paprika instead of black pepper.");
+  assert.equal(s.ingredients.length, 0, "a substitution never changes amounts by itself");
+  assert.match(batchFromSession(finish(s, at(5)), sausage).substitutions, /^Smoked paprika instead of black pepper/);
+});
+
+test("cooking companion: 'double the recipe' reads the recipe's own amounts back, and changes nothing", () => {
+  assert.deepEqual(parseCommand("Double the recipe"), { kind: "scale-recipe", factor: 2 });
+  assert.deepEqual(parseCommand("half the batch please"), { kind: "scale-recipe", factor: 0.5 });
+  const s = newSession({ recipe: sausage, cookName: "Lorne", now: T0 });
+  const r = say(s, "double the recipe", 1);
+  assert.match(r.reply, /^Doubled, from the recipe's own amounts: 6 kg pork shoulder; 30 g black pepper; 8 cloves garlic; Hog casings \(no amount written\)/);
+  assert.deepEqual(r.session.ingredients, s.ingredients);
+});
+
+test("cooking companion: questions are answered from the recipe's text, or honestly not", () => {
+  assert.equal(parseCommand("What plate do I grind through?").kind, "question");
+  const s = newSession({ recipe: sausage, cookName: "Lorne", now: T0 });
+  assert.equal(say(s, "Which plate do I grind through?", 1).reply, "The recipe says: Grind through the 8 mm plate");
+  assert.match(say(s, "What wine goes with this?", 1).reply, /doesn't say/);
+  // Notes stay notes; questions never become stored notes.
+  assert.equal(parseCommand("The casing is a bit dry").kind, "note");
+  assert.equal(say(s, "How long do I mix?", 1).session.events.filter((e) => e.kind === "note").length, 0);
+});
+
+test("cooking companion: an ingredient section is answered whole; a recipe without amounts isn't 'scaled'", () => {
+  const bowl: Recipe = { ...sausage, id: "bowl", kind: "general", instructions: "Toss everything.", ingredients: "Romaine\nCarrot\n\nDressing:\nSoy sauce\nSesame oil\nVinegar" };
+  const s = newSession({ recipe: bowl, cookName: "Lorne", now: T0 });
+  assert.equal(say(s, "What goes in the dressing?", 1, bowl).reply, "The recipe says: Dressing: Soy sauce, Sesame oil, Vinegar");
+  assert.match(say(s, "double the recipe", 1, bowl).reply, /doesn't write down amounts/);
+});

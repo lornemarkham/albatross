@@ -152,7 +152,7 @@ export function hear(s0: CookingSession, text: string, ctx: Context): Result {
 
 type Inner = { session: CookingSession; reply: string; understood?: string; stopListening?: boolean };
 
-const CATEGORY_WORD: Record<NoteCategory, string> = { observation: "Note", "next-time": "Note for next time", tasting: "Tasting note", equipment: "Equipment" };
+const CATEGORY_WORD: Record<NoteCategory, string> = { observation: "Note", "next-time": "Note for next time", tasting: "Tasting note", equipment: "Equipment", substitution: "Substitution" };
 
 function noted(s: CookingSession, category: NoteCategory, text: string, ctx: Context, lineId: string): Inner {
   const clean = text.replace(/[.!?]+$/, "").trim();
@@ -229,6 +229,12 @@ function act(s: CookingSession, cmd: Command, ctx: Context, lineId: string): Inn
       const next = addNote(s, cmd.category, cmd.text, ctx.now, lineId);
       return { session: next, reply: `${CATEGORY_WORD[cmd.category]} saved.`, understood: `${CATEGORY_WORD[cmd.category]}: ${cmd.text}` };
     }
+    case "substitution": {
+      const text = `${cap(cmd.used)} instead of ${cmd.insteadOf}`;
+      return { session: addNote(s, "substitution", text, ctx.now, lineId), reply: `Substitution noted: ${text.toLowerCase()}.`, understood: `Substitution: ${text}` };
+    }
+    case "scale-recipe": return { session: s, reply: scaleRecipe(ctx.recipe, cmd.factor), understood: `Recipe × ${cmd.factor} (read back, nothing changed)` };
+    case "question": return { session: s, reply: lookUp(ctx.recipe, cmd.text), understood: `Question: ${cmd.text}` };
     case "note-prompt":
       return { session: { ...s, awaitingNote: cmd.category }, reply: cmd.category === "next-time" ? "Okay. What should we do differently next time?" : cmd.category === "tasting" ? "Okay. How does it taste?" : "Okay. What's the note?" };
   }
@@ -342,3 +348,43 @@ export function scaleAnswer(recipe: Recipe | null, ingredient: string, amount: Q
 
 const cap = (t: string) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 const fmtG = (g: number) => (g >= 1000 ? qtySpoken({ value: round(g / 1000), unit: "kg" }) : qtySpoken({ value: Math.round(g * 10) / 10, unit: "g" }));
+
+// ── Answers from the recipe's own text (no AI, nothing invented) ────────────
+const FRACTION: Record<string, number> = { "¼": 0.25, "½": 0.5, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3, "⅛": 0.125 };
+function leadingAmount(line: string): { value: number; rest: string } | null {
+  const m = /^\s*(\d+(?:[.,]\d+)?)?\s*(?:(\d+)\/(\d+)|([¼½¾⅓⅔⅛]))?(?=\s|[a-zA-Z])/.exec(line);
+  if (!m || (!m[1] && !m[2] && !m[4])) return null;
+  let v = m[1] ? Number(m[1].replace(",", ".")) : 0;
+  if (m[2] && m[3] && Number(m[3]) > 0) v += Number(m[2]) / Number(m[3]);
+  if (m[4]) v += FRACTION[m[4]];
+  return v > 0 ? { value: v, rest: line.slice(m[0].length).trim() } : null;
+}
+const nice = (v: number) => (Math.abs(v - Math.round(v)) < 0.01 ? String(Math.round(v)) : String(Math.round(v * 100) / 100));
+
+export function scaleRecipe(recipe: Recipe | null, factor: number): string {
+  if (!recipe?.ingredients.trim()) return "This cook has no written ingredient list to scale.";
+  const lines = recipe.ingredients.split("\n").map((l) => l.replace(/^[-•*·]\s*/, "").trim()).filter((l) => l && !/:$/.test(l));
+  if (!lines.some((l) => leadingAmount(l))) return "The recipe doesn't write down amounts, so there's nothing to scale. Say what you add as you go and I'll keep track.";
+  const out = lines.map((l) => { const a = leadingAmount(l); return a ? `${nice(a.value * factor)} ${a.rest}` : `${l} (no amount written)`; });
+  const word = factor === 2 ? "Doubled" : factor === 0.5 ? "Halved" : factor === 3 ? "Tripled" : `Times ${nice(factor)}`;
+  return `${word}, from the recipe's own amounts: ${out.join("; ")}. Nothing in this cook was changed — say what you actually add as you go.`;
+}
+
+const STOP_WORDS = new Set("a an the i we do does is it to of for in on how what when which where why should can much many long it's its my our you your this that be with and or at by from".split(" "));
+export function lookUp(recipe: Recipe | null, question: string): string {
+  if (!recipe) return "There's no written recipe for this cook, so I can't look that up. I've kept your question in the transcript.";
+  const want = question.toLowerCase().replace(/[^a-z0-9°\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP_WORDS.has(w)).map((w) => w.replace(/s$/, ""));
+  if (!want.length) return "I didn't catch what to look up. Try “what temperature does the oven go to?”";
+  // Ingredient sections ("Dressing:" and the lines under it) count as one passage.
+  const sections = recipe.ingredients.split(/\n\s*\n/).flatMap((block) => {
+    const ls = block.split("\n").map((x) => x.trim()).filter(Boolean);
+    return ls[0]?.endsWith(":") && ls.length > 1 ? [`${ls[0]} ${ls.slice(1).join(", ")}`] : ls;
+  });
+  const sentences = [...[recipe.instructions, recipe.notes].join("\n").split(/(?<=[.!?])\s+|\n+/), ...sections].map((x) => x.trim()).filter(Boolean);
+  const scored = sentences.map((x) => {
+    const words = x.toLowerCase().replace(/[^a-z0-9°\s]/g, " ").split(/\s+/).map((w) => w.replace(/s$/, ""));
+    return { x, n: want.filter((w) => words.includes(w)).length };
+  }).filter((r) => r.n > 0).sort((a, b) => b.n - a.n);
+  if (!scored.length) return "The recipe doesn't say. I've kept your question in the transcript.";
+  return `The recipe says: ${scored.slice(0, 2).map((r) => r.x).join(" … ")}`;
+}

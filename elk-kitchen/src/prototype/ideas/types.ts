@@ -62,6 +62,10 @@ export type PantryItem = {
   unit: string;               // free text, no conversion
   bestBefore: string | null;  // earliest open batch, YYYY-MM-DD
   location: string;
+  // Every open batch, oldest first (real Pantry only): where it is, how many, best before.
+  places?: { location: string; quantity: number; bestBefore: string | null }[];
+  // Pantry's own "running low" level for this product, when set.
+  lowStockAt?: number | null;
 };
 
 export type Weather = "hot" | "mild" | "cold" | "rainy";

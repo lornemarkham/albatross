@@ -30,6 +30,11 @@ function unitOf(item: ItemRow): string {
   return typeof u === "string" && u.trim() ? u.trim() : "items";
 }
 
+function lowStockOf(item: ItemRow): number | null {
+  const v = item.attributes?.lowStockAt;
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
 // Mirrors Inventory's pantryModel.summarize: lots are the truth once a
 // product has any; before that, the product's own count is all there is.
 export function summarizePantry(items: ItemRow[], lots: LotRow[]): PantryItem[] {
@@ -45,6 +50,8 @@ export function summarizePantry(items: ItemRow[], lots: LotRow[]): PantryItem[] 
       unit: unitOf(item),
       bestBefore: dates[0] ?? null,
       location: open[0]?.location?.trim() ?? "",
+      places: open.map((l) => ({ location: l.location?.trim() ?? "", quantity: l.quantity_remaining, bestBefore: l.best_before })),
+      lowStockAt: lowStockOf(item),
     };
   }).filter((p) => p.name);
 }
@@ -63,9 +70,14 @@ export async function loadPantry(client: SupabaseClient): Promise<PantryLoad> {
 
 export type ShoppingAdd = { ok: true; added: number } | { ok: false; error: string };
 
-export async function addToShoppingList(client: SupabaseClient, names: string[], recipeTitle: string): Promise<ShoppingAdd> {
+// `recipeTitle` set: a recipe's missing ingredients (source "recipe", note "for <title>").
+// Empty: things someone asked for in Kitchen (source "manual", Pantry's own word for by hand).
+export async function addToShoppingList(client: SupabaseClient, names: string[], recipeTitle: string, note = ""): Promise<ShoppingAdd> {
+  const title = recipeTitle.trim();
   const { data, error } = await client.rpc("pantry_shopping_add", {
-    p_names: names, p_note: recipeTitle.trim() ? `for ${recipeTitle.trim()}`.slice(0, 500) : null, p_source: "recipe",
+    p_names: names,
+    p_note: (title ? `for ${title}` : note.trim()).slice(0, 500) || null,
+    p_source: title ? "recipe" : "manual",
   });
   if (error) {
     // PGRST202: Inventory's database doesn't have the shopping list yet.

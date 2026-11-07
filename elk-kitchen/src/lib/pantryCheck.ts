@@ -101,3 +101,7 @@ export function checkRecipe(ingredients: string, pantry: PantryItem[]): RecipePa
 
   return { lines, have, missing, unknown, total, headline, prompt };
 }
+
+// For other matchers (suggestions): the same word rules as above.
+export const wordsOf = words;
+export const mentions = (line: string, phrase: string) => contains(words(line), words(phrase));

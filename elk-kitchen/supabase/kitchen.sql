@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- ELK Kitchen — shared family recipes — v1
+-- ELK Kitchen — shared family recipes — v5
 -- Run in: Supabase Dashboard → SQL Editor → paste → Run. Safe to re-run.
 --
 -- Uses the ELK project's existing family list (public.elk_family_members and
@@ -14,6 +14,9 @@
 --   kitchen_cooking_entries   one occasion someone made it (what actually happened)
 --   kitchen_favourites        per-person favourites
 --   kitchen_recipe_revisions  every previous version of a recipe, kept automatically
+--   kitchen_meal_feedback     v5: each person's own say about a dinner (rating, comment,
+--                             photos, "make it again?", an improvement); edits keep history
+--   kitchen_member_profiles   v5: each person's own food notes (avoids/allergies, likes)
 --
 -- Safety rules enforced here, not just in the app:
 --   • only family members can read or write anything
@@ -32,7 +35,8 @@ BEGIN
   IF to_regprocedure('public.elk_is_family_member()') IS NULL THEN
     RAISE EXCEPTION 'ELK family access is not set up (public.elk_is_family_member() missing). Run ELK Inventory''s supabase-family-access.sql first — stopping, nothing changed.';
   END IF;
-  FOREACH t IN ARRAY ARRAY['kitchen_recipes', 'kitchen_cooking_entries', 'kitchen_favourites', 'kitchen_recipe_revisions'] LOOP
+  FOREACH t IN ARRAY ARRAY['kitchen_recipes', 'kitchen_cooking_entries', 'kitchen_favourites', 'kitchen_recipe_revisions',
+                         'kitchen_meal_feedback', 'kitchen_member_profiles'] LOOP
     IF to_regclass('public.' || t) IS NOT NULL
        AND COALESCE(obj_description(to_regclass('public.' || t), 'pg_class'), '') NOT LIKE 'elk-kitchen:%' THEN
       RAISE EXCEPTION 'public.% exists but was not created by ELK Kitchen — stopping, nothing changed.', t;
@@ -200,7 +204,8 @@ BEGIN
   FOR r IN
     SELECT tablename, policyname FROM pg_policies
      WHERE schemaname = 'public'
-       AND tablename IN ('kitchen_recipes', 'kitchen_cooking_entries', 'kitchen_favourites', 'kitchen_recipe_revisions')
+       AND tablename IN ('kitchen_recipes', 'kitchen_cooking_entries', 'kitchen_favourites', 'kitchen_recipe_revisions',
+                         'kitchen_meal_feedback', 'kitchen_member_profiles')
   LOOP
     EXECUTE format('DROP POLICY %I ON public.%I', r.policyname, r.tablename);
   END LOOP;
@@ -229,5 +234,119 @@ CREATE POLICY "People can add their own favourites" ON public.kitchen_favourites
   WITH CHECK ((SELECT public.elk_is_family_member()) AND user_id = (SELECT auth.uid()));
 CREATE POLICY "People can remove their own favourites" ON public.kitchen_favourites FOR DELETE TO authenticated
   USING ((SELECT public.elk_is_family_member()) AND user_id = (SELECT auth.uid()));
+
+-- ── v5: family dinner feedback (one per person per dinner) ──────────────────
+-- A dinner is a cooking entry. Everyone who ate it can leave their own
+-- feedback; nobody can write or change anyone else's. Feedback is never
+-- deleted through the API (a person can clear their own text), and every edit
+-- keeps the previous values in `history`, so nothing anyone said is lost.
+-- Rows brought in from a phone's backup (source 'device-import') keep the name
+-- that was typed on that phone and are read-only.
+CREATE TABLE IF NOT EXISTS public.kitchen_meal_feedback (
+  -- TEXT so feedback recorded on a phone keeps its id when imported (re-import adds nothing).
+  id           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text CHECK (length(id) BETWEEN 1 AND 140),
+  -- RESTRICT: a dinner other people have rated can't be removed from under them.
+  entry_id     TEXT NOT NULL REFERENCES public.kitchen_cooking_entries(id) ON DELETE RESTRICT,
+  recipe_id    TEXT NOT NULL REFERENCES public.kitchen_recipes(id) ON DELETE RESTRICT,
+  user_id      UUID NOT NULL DEFAULT auth.uid(),
+  -- From the family list for app rows (set by the database); as typed for imports.
+  author_name  TEXT NOT NULL DEFAULT '' CHECK (length(author_name) <= 60),
+  source       TEXT NOT NULL DEFAULT 'app' CHECK (source IN ('app', 'device-import')),
+  rating       NUMERIC(3,1) CHECK (rating IS NULL OR rating BETWEEN 0 AND 10),
+  comment      TEXT NOT NULL DEFAULT '' CHECK (length(comment) <= 5000),
+  improvement  TEXT NOT NULL DEFAULT '' CHECK (length(improvement) <= 5000),
+  make_again   TEXT CHECK (make_again IS NULL OR make_again IN ('yes', 'maybe', 'no')),
+  photos       JSONB NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(photos) = 'array' AND length(photos::text) <= 20000),
+  history      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  version      INTEGER NOT NULL DEFAULT 1,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+COMMENT ON TABLE public.kitchen_meal_feedback IS 'elk-kitchen: each family member''s own feedback on a dinner.';
+CREATE INDEX IF NOT EXISTS kitchen_meal_feedback_recipe_idx ON public.kitchen_meal_feedback (recipe_id);
+CREATE INDEX IF NOT EXISTS kitchen_meal_feedback_entry_idx ON public.kitchen_meal_feedback (entry_id);
+-- One say per person per dinner (imports are kept beside it, under the typed name).
+CREATE UNIQUE INDEX IF NOT EXISTS kitchen_meal_feedback_one_each
+  ON public.kitchen_meal_feedback (entry_id, user_id) WHERE source = 'app';
+
+-- Runs as the caller, so it sees only what they may see (a stranger finds no dinner).
+CREATE OR REPLACE FUNCTION public.kitchen_meal_feedback_stamp()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = '' AS $$
+DECLARE
+  v_recipe TEXT;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    SELECT recipe_id INTO v_recipe FROM public.kitchen_cooking_entries WHERE id = NEW.entry_id;
+    IF v_recipe IS NULL THEN RAISE EXCEPTION 'That dinner isn''t in the family''s cooking history.'; END IF;
+    NEW.recipe_id  := v_recipe;
+    NEW.user_id    := auth.uid();
+    NEW.version    := 1;
+    NEW.history    := '[]'::jsonb;
+    NEW.created_at := NOW();
+    IF NEW.source = 'app' THEN
+      NEW.author_name := COALESCE((SELECT display_name FROM public.elk_family_members WHERE user_id = auth.uid()), '');
+    END IF;
+  ELSE
+    IF OLD.source <> 'app' THEN RAISE EXCEPTION 'Imported feedback can''t be changed.'; END IF;
+    NEW.id := OLD.id; NEW.entry_id := OLD.entry_id; NEW.recipe_id := OLD.recipe_id; NEW.user_id := OLD.user_id;
+    NEW.author_name := OLD.author_name; NEW.source := OLD.source; NEW.created_at := OLD.created_at;
+    NEW.version := OLD.version + 1;
+    NEW.history := OLD.history || jsonb_build_array(jsonb_build_object(
+      'version', OLD.version, 'at', OLD.updated_at, 'rating', OLD.rating, 'comment', OLD.comment,
+      'improvement', OLD.improvement, 'make_again', OLD.make_again, 'photos', OLD.photos));
+  END IF;
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.kitchen_meal_feedback_stamp() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS kitchen_meal_feedback_stamp ON public.kitchen_meal_feedback;
+CREATE TRIGGER kitchen_meal_feedback_stamp BEFORE INSERT OR UPDATE ON public.kitchen_meal_feedback
+  FOR EACH ROW EXECUTE FUNCTION public.kitchen_meal_feedback_stamp();
+
+-- ── v5: each person's food notes ─────────────────────────────────────────────
+-- Written by that person only, readable by the family, so suggestions can say
+-- "Sam avoids mushrooms" because Sam said so — never inferred.
+CREATE TABLE IF NOT EXISTS public.kitchen_member_profiles (
+  user_id     UUID PRIMARY KEY DEFAULT auth.uid(),
+  avoids      TEXT NOT NULL DEFAULT '' CHECK (length(avoids) <= 2000),
+  likes       TEXT NOT NULL DEFAULT '' CHECK (length(likes) <= 2000),
+  notes       TEXT NOT NULL DEFAULT '' CHECK (length(notes) <= 2000),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+COMMENT ON TABLE public.kitchen_member_profiles IS 'elk-kitchen: each family member''s own food notes (avoids, likes).';
+
+CREATE OR REPLACE FUNCTION public.kitchen_member_profiles_stamp()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  NEW.user_id := CASE WHEN TG_OP = 'INSERT' THEN auth.uid() ELSE OLD.user_id END;
+  NEW.updated_at := NOW();
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.kitchen_member_profiles_stamp() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS kitchen_member_profiles_stamp ON public.kitchen_member_profiles;
+CREATE TRIGGER kitchen_member_profiles_stamp BEFORE INSERT OR UPDATE ON public.kitchen_member_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.kitchen_member_profiles_stamp();
+
+ALTER TABLE public.kitchen_meal_feedback   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.kitchen_member_profiles ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.kitchen_meal_feedback, public.kitchen_member_profiles FROM PUBLIC, anon;
+REVOKE DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.kitchen_meal_feedback, public.kitchen_member_profiles FROM authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.kitchen_meal_feedback, public.kitchen_member_profiles TO authenticated;
+
+CREATE POLICY "Family members can read dinner feedback" ON public.kitchen_meal_feedback FOR SELECT TO authenticated
+  USING ((SELECT public.elk_is_family_member()));
+CREATE POLICY "Family members can give their own feedback" ON public.kitchen_meal_feedback FOR INSERT TO authenticated
+  WITH CHECK ((SELECT public.elk_is_family_member()) AND user_id = (SELECT auth.uid()));
+CREATE POLICY "People can edit only their own feedback" ON public.kitchen_meal_feedback FOR UPDATE TO authenticated
+  USING ((SELECT public.elk_is_family_member()) AND user_id = (SELECT auth.uid()))
+  WITH CHECK ((SELECT public.elk_is_family_member()) AND user_id = (SELECT auth.uid()));
+
+CREATE POLICY "Family members can read food notes" ON public.kitchen_member_profiles FOR SELECT TO authenticated
+  USING ((SELECT public.elk_is_family_member()));
+CREATE POLICY "People can write their own food notes" ON public.kitchen_member_profiles FOR INSERT TO authenticated
+  WITH CHECK ((SELECT public.elk_is_family_member()) AND user_id = (SELECT auth.uid()));
+CREATE POLICY "People can edit only their own food notes" ON public.kitchen_member_profiles FOR UPDATE TO authenticated
+  USING ((SELECT public.elk_is_family_member()) AND user_id = (SELECT auth.uid()))
+  WITH CHECK ((SELECT public.elk_is_family_member()) AND user_id = (SELECT auth.uid()));
 
 NOTIFY pgrst, 'reload schema';

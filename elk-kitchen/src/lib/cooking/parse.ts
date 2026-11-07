@@ -198,7 +198,13 @@ export type Command =
   | { kind: "scale"; ingredient: string; amount: Qty }
   | { kind: "temperature"; what: TempWhat; value: number; unit: TempUnit | null }
   | { kind: "note"; category: "observation" | "next-time" | "tasting" | "equipment"; text: string }
-  | { kind: "note-prompt"; category: "next-time" | "tasting" | "observation" };
+  | { kind: "note-prompt"; category: "next-time" | "tasting" | "observation" }
+  // "Used butter instead of oil" — kept as the batch's substitution.
+  | { kind: "substitution"; used: string; insteadOf: string }
+  // "Double the recipe" — read the recipe's own amounts back, scaled. Changes nothing.
+  | { kind: "scale-recipe"; factor: number }
+  // A question no rule answers: looked up in the recipe's own text.
+  | { kind: "question"; text: string };
 
 const clean = (s: string) => s.replace(/[“”"]/g, "").replace(/\s+/g, " ").trim();
 const stripEnd = (s: string) => s.replace(/[.!?]+$/, "").trim();
@@ -212,6 +218,11 @@ export function parseCommand(input: string): Command {
   if (/^(yes|yeah|yep|yup|correct|that'?s (right|correct)|right|confirm(ed)?|do it|sure)$/.test(bare)) return { kind: "yes" };
   if (/^(no|nope|nah|cancel( that)?|wrong|never ?mind|don'?t)$/.test(bare)) return { kind: "no" };
   if (/^(stop|stop listening|stop recording|pause|pause listening|that'?s all|done listening|mic off)$/.test(bare)) return { kind: "stop" };
+
+  const sub = substitution(bare);
+  if (sub) return sub;
+  const factor = recipeFactor(bare);
+  if (factor) return { kind: "scale-recipe", factor };
 
   if (/\b(next step|what'?s next|what is next|go on|go to the next|next one|^next$)\b/.test(bare)) return { kind: "next-step" };
   if (/\b(previous step|go back|last step|step back|back one)\b/.test(bare)) return { kind: "previous-step" };
@@ -292,7 +303,33 @@ export function parseCommand(input: string): Command {
   const noteHead = original.match(/^(?:make a note|note|observation|add a note|remember)[:,.\s-]*(.*)$/i);
   if (noteHead) return noteHead[1]?.trim() ? { kind: "note", category: "observation", text: capital(stripEnd(noteHead[1].trim())) } : { kind: "note-prompt", category: "observation" };
 
+  if (/\?\s*$/.test(original) || /^(how|what|when|which|where|why|should i|should we|can i|can we|do i|do we|does it|is it|is the|are the|how'?s)\b/.test(bare)) {
+    return { kind: "question", text: stripEnd(original) };
+  }
   return { kind: "note", category: "observation", text: capital(stripEnd(original)) };
+}
+
+const subName = (x: string) => tidyName(x.replace(/^(a|an|the|some|my|our)\s+/, "")).replace(/\s+(this time|today|tonight)$/, "");
+function substitution(t: string): Command | null {
+  // X replaces Y
+  let m = /^(?:i |we )?(?:used|use|using|went with|go with|added|put in|tried) (.+?) (?:instead of|in place of|rather than) (.+)$/.exec(t)
+    ?? /^(?:i |we )?(?:substituted|substitute|subbed|sub) (.+?) for (.+)$/.exec(t);
+  if (m) return { kind: "substitution", used: subName(m[1]), insteadOf: subName(m[2]) };
+  // Y replaced by X
+  m = /^(?:i |we )?(?:swapped|swap|replaced|replace|switched|switch) (?:out )?(.+?) (?:for|with) (.+)$/.exec(t);
+  if (m) return { kind: "substitution", used: subName(m[2]), insteadOf: subName(m[1]) };
+  m = /^(?:no|out of|we'?re out of|didn'?t have) (.+?),? (?:so )?(?:i |we )?used (.+)$/.exec(t);
+  if (m) return { kind: "substitution", used: subName(m[2]), insteadOf: subName(m[1]) };
+  return null;
+}
+
+function recipeFactor(t: string): number | null {
+  if (!/\b(recipe|batch|everything|the whole thing|it all|all of it)\b/.test(t)) return null;
+  if (/\b(double|twice|2 ?x|times 2)\b/.test(t)) return 2;
+  if (/\b(triple|three times|3 ?x|times 3)\b/.test(t)) return 3;
+  if (/\b(half|halve)\b/.test(t)) return 0.5;
+  const m = /\b(?:times|by|scale (?:it |the recipe )?(?:by|to)) (\d+(?:\.\d+)?)\b/.exec(t);
+  return m && Number(m[1]) > 0 && Number(m[1]) <= 10 ? Number(m[1]) : null;
 }
 
 function tidyName(s: string): string {

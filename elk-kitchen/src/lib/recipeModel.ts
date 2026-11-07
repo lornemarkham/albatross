@@ -2,6 +2,8 @@ import type { CookingEntry, LegacyRecipe, PhotoRef, Recipe, RecipeKind } from ".
 import { blankDetails, normalizeDetails } from "./meat";
 import type { ExportedPhoto } from "./photos";
 import { normalizeSession } from "./cooking/drafts";
+import type { MealFeedback, MemberProfile } from "../types/feedback";
+import { normalizeFeedback } from "./familyMemory";
 
 // ── Legacy (browser-only) recipes ────────────────────────────────────────────
 
@@ -97,6 +99,10 @@ export type ExportBundle = {
   photos?: ExportedPhoto[];
   // Photos a record points to that couldn't be found when exporting.
   missingPhotoIds?: string[];
+  // Each person's feedback on dinners, and their food notes (added later;
+  // older files simply don't have them).
+  mealFeedback?: MealFeedback[];
+  memberProfiles?: MemberProfile[];
 };
 
 export type ImportData = {
@@ -104,6 +110,7 @@ export type ImportData = {
   entries: CookingEntry[];
   favouriteRecipeIds: string[];
   photos: ExportedPhoto[];
+  mealFeedback?: MealFeedback[];
 };
 
 export function exportFileName(bundle: ExportBundle): string {
@@ -139,6 +146,8 @@ export function parseImportFile(text: string, now: string): ImportData {
     favouriteRecipeIds: (Array.isArray(b.favouriteRecipeIds) ? b.favouriteRecipeIds : []).map(String),
     photos: (Array.isArray(b.photos) ? b.photos : []).filter(
       (p): p is ExportedPhoto => !!p && typeof p.id === "string" && typeof p.data === "string" && typeof p.mime === "string"),
+    mealFeedback: (Array.isArray(b.mealFeedback) ? b.mealFeedback : []).map(normalizeFeedback)
+      .filter((f): f is MealFeedback => !!f && ids.has(f.recipeId)),
   };
   // Legacy records carried inside the export that never made it into `recipes`.
   if (Array.isArray(b.legacyBrowserRecipes)) {

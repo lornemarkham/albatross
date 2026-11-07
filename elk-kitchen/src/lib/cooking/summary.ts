@@ -93,7 +93,10 @@ export function batchFromSession(s: CookingSession, recipe: Recipe | null): Batc
     cookedOn: dateOf(s.startedAt),
     cookName: s.cookName,
     ingredientsUsed: clip(lines.join("\n"), LIMIT.ingredientsUsed),
-    substitutions: extra.length ? `Not in the written recipe: ${extra.join(", ")}` : "",
+    substitutions: clip([
+      ...notes(s, "substitution").map((n) => n.text),
+      ...(extra.length ? [`Not in the written recipe: ${extra.join(", ")}`] : []),
+    ].join("\n"), LIMIT.other),
     familyReaction: "",
     improveNextTime: clip(notes(s, "next-time").map((n) => n.text).join("\n"), LIMIT.other),
     notes: clip([

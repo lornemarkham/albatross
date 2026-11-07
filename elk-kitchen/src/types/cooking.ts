@@ -32,7 +32,7 @@ export type SessionIngredient = {
   history: IngredientChange[];
 };
 
-export type NoteCategory = "observation" | "next-time" | "tasting" | "equipment";
+export type NoteCategory = "observation" | "next-time" | "tasting" | "equipment" | "substitution";
 
 export type TempUnit = "C" | "F";
 export type TempWhat = "internal" | "smoker" | "oven" | "water" | "grill" | "fridge" | "other";

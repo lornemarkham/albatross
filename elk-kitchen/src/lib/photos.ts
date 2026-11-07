@@ -165,6 +165,7 @@ export async function bundleWithPhotos(
   const ids = [
     ...[...bundle.recipes, ...bundle.cookingEntries].flatMap((x) => x.photos.map((p) => p.id)),
     ...bundle.cookingEntries.flatMap((e) => sessionMediaIds(e.session)),
+    ...(bundle.mealFeedback ?? []).flatMap((f) => f.photos.map((p) => p.id)),
   ];
   const { photos, missing } = await exportPhotos(photoStore, ids);
   return { ...bundle, photos, ...(missing.length ? { missingPhotoIds: missing } : {}) };

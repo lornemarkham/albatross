@@ -29,7 +29,7 @@ export function MediaView({ media, className = "" }: { media: MediaRef; classNam
 }
 
 const ICON: Record<string, string> = {
-  started: "▶️", finished: "🏁", ingredient: "🧂", observation: "📝", "next-time": "🔁", tasting: "😋", equipment: "🔧",
+  started: "▶️", finished: "🏁", ingredient: "🧂", observation: "📝", "next-time": "🔁", tasting: "😋", equipment: "🔧", substitution: "🔄",
   temperature: "🌡️", timer: "⏱", photo: "📷", video: "🎥", voice: "🎙", pantry: "🥫",
 };
 
@@ -41,7 +41,7 @@ export function eventLine(e: SessionEvent): { icon: string; title: string; body?
       const verb = { said: "Added", corrected: "Corrected", edited: "Edited", "added-more": "Added more", removed: "Removed" }[e.action];
       return { icon: ICON.ingredient, title: `${verb} ${e.name}`, body: e.action === "said" ? qtyText(e.after) : e.action === "removed" ? `was ${qtyText(e.before)}` : `${qtyText(e.before)} → ${qtyText(e.after)}` };
     }
-    case "note": return { icon: ICON[e.category], title: { observation: "Note", "next-time": "Next time", tasting: "Tasting", equipment: "Equipment" }[e.category], body: e.text };
+    case "note": return { icon: ICON[e.category], title: { observation: "Note", "next-time": "Next time", tasting: "Tasting", equipment: "Equipment", substitution: "Substitution" }[e.category], body: e.text };
     case "temperature": return { icon: ICON.temperature, title: TEMP_LABEL[e.what], body: tempText(e.value, e.unit) };
     case "timer": return e.action === "started" ? { icon: ICON.timer, title: `Timer started: ${e.label}`, body: durationText(e.seconds) } : { icon: ICON.timer, title: `Timer ${e.action === "done" ? "done" : "cancelled"}: ${e.label}` };
     case "media": return { icon: ICON[e.media.type], title: e.media.finished ? `Finished ${{ photo: "photo", video: "clip", voice: "voice note" }[e.media.type]}` : { photo: "Photo", video: "Clip", voice: "Voice note" }[e.media.type], body: e.media.caption || undefined };

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { RecipeCard } from "../components/RecipeCard";
 import { ModeNotice } from "../components/ModeNotice";
 import { inputClass } from "../components/ui";
@@ -12,6 +12,7 @@ import { usePantry } from "../lib/usePantry";
 import { checkRecipe } from "../lib/pantryCheck";
 import { ContinueCooking } from "./StartCookingPage";
 import { HistoryCard, cookingHistory } from "./HistoryPage";
+import { AskBox } from "./CompanionPage";
 
 // Matches every word typed, anywhere in the title, ingredients, tags, author or notes.
 export function matchesSearch(r: RecipeSummary, q: string): boolean {
@@ -62,6 +63,8 @@ export function RecipeListPage() {
         </div>
         <Link to="/data" className="shrink-0 text-sm text-sage underline">Backup &amp; import</Link>
       </header>
+
+      <TonightAsk />
 
       <section className="mb-5 overflow-hidden rounded-3xl bg-cocoa p-5 text-butter shadow-md sm:p-7">
         <p className="text-xs font-bold uppercase tracking-widest text-saffron">Hands-free cooking</p>
@@ -159,5 +162,18 @@ export function RecipeListPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// The companion's front door: ask, and land on /tonight with the answer.
+function TonightAsk() {
+  const navigate = useNavigate();
+  const [text, setText] = useState("");
+  return (
+    <section className="mb-5 rounded-3xl border border-clay bg-cream p-5 shadow-sm sm:p-6">
+      <h2 className="font-display text-2xl font-semibold text-bark">What should we cook?</h2>
+      <p className="mb-3 mt-1 text-sm text-bark/70">From the family's recipes, what Pantry shows and how everyone rated dinners. <Link to="/tonight" className="text-sage underline">What we have</Link></p>
+      <AskBox compact text={text} setText={setText} onAsk={(q) => q.trim() && navigate(`/tonight?q=${encodeURIComponent(q.trim())}`)} />
+    </section>
   );
 }

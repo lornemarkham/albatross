@@ -10,13 +10,14 @@ import { safetyChecks } from "../lib/meat";
 import { clock } from "../lib/cooking/parse";
 import { sectionLabel } from "../components/ui";
 import { StartCookingButton } from "./StartCookingPage";
+import { DinnerFeedback } from "../components/DinnerFeedback";
 
 // One batch, everything that was kept about it: the summary, the timeline
 // with photos, clips and voice notes, the transcript, and Pantry changes.
 export function BatchJournalPage() {
   const { id = "", entryId = "" } = useParams<{ id: string; entryId: string }>();
   const { store } = useKitchen();
-  const { data, error } = useLoad(() => store.getRecipe(id), [store, id]);
+  const { data, error, reload } = useLoad(() => store.getRecipe(id), [store, id]);
   if (error) return <Message>{error}</Message>;
   if (data === undefined) return <Message>Loading…</Message>;
   const e = data?.entries.find((x) => x.id === entryId);
@@ -37,6 +38,11 @@ export function BatchJournalPage() {
       </p>
 
       {finished[0] && <div className="mt-4 overflow-hidden rounded-2xl"><MediaView media={finished[0]} className="aspect-[4/3] w-full" /></div>}
+
+      <Section title="How was dinner?">
+        <DinnerFeedback entry={e} favourite={data.favourite}
+          onFavourite={(on) => { store.setFavourite(recipe.id, on).then(reload, () => reload()); }} />
+      </Section>
 
       <Section title="Summary">
         {recipe.kind !== "general" && <div className="mb-3"><DetailsSummary kind={recipe.kind} d={e.details} /><div className="mt-2"><SafetyNotes notes={safetyChecks(recipe.kind, e.details)} /></div></div>}

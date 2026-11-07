@@ -54,9 +54,12 @@ test("on-hand follows Inventory: batches are the truth once a product has any", 
     { item_id: "a", quantity_remaining: 0, location: "Garage", best_before: "2025-01-01", purchased_on: "2025-01-01", created_at: "0" },
   ];
   assert.deepEqual(summarizePantry(items, lots), [
-    { name: "Black beans", onHand: 3, unit: "cans", bestBefore: "2026-11-01", location: "Basement" },
-    { name: "Oats", onHand: 3, unit: "items", bestBefore: null, location: "" },
-    { name: "Lentils", onHand: 0, unit: "items", bestBefore: null, location: "" },
+    { name: "Black beans", onHand: 3, unit: "cans", bestBefore: "2026-11-01", location: "Basement",
+      // Every open batch, oldest first; the empty Garage batch isn't one.
+      places: [{ location: "Basement", quantity: 1, bestBefore: "2027-01-01" }, { location: "Kitchen", quantity: 2, bestBefore: "2026-11-01" }],
+      lowStockAt: null },
+    { name: "Oats", onHand: 3, unit: "items", bestBefore: null, location: "", places: [], lowStockAt: null },
+    { name: "Lentils", onHand: 0, unit: "items", bestBefore: null, location: "", places: [], lowStockAt: null },
   ]);
 });
 

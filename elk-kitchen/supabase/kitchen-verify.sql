@@ -18,6 +18,7 @@ DO $$
 DECLARE
   member   UUID;
   stranger UUID := gen_random_uuid();
+  eid      TEXT;
   rid      TEXT := 'verify-' || replace(gen_random_uuid()::text, '-', '');
   names    TEXT[] := '{}';
   oks      BOOLEAN[] := '{}';
@@ -59,6 +60,29 @@ BEGIN
     names := array_append(names, 'member "Delete" hides (and keeps) the recipe'); oks := array_append(oks, (n = 1)); details := array_append(details, (n || ' rows marked removed'));
     INSERT INTO public.kitchen_cooking_entries (recipe_id, cook_name) VALUES (rid, 'Verify');
     names := array_append(names, 'member can record cooking'); oks := array_append(oks, TRUE); details := array_append(details, 'ok');
+    SELECT id INTO eid FROM public.kitchen_cooking_entries WHERE recipe_id = rid LIMIT 1;
+
+    -- Dinner feedback (v5): one each, own only, edits keep history.
+    INSERT INTO public.kitchen_meal_feedback (entry_id, recipe_id, rating, comment, make_again)
+      VALUES (eid, rid, 9, 'Verify comment', 'yes');
+    UPDATE public.kitchen_meal_feedback SET rating = 8 WHERE entry_id = eid AND user_id = member RETURNING version INTO v;
+    SELECT jsonb_array_length(history) INTO n FROM public.kitchen_meal_feedback WHERE entry_id = eid AND user_id = member;
+    names := array_append(names, 'member can rate a dinner; an edit keeps the earlier rating'); oks := array_append(oks, (v = 2 AND n = 1)); details := array_append(details, ('version ' || v || ', ' || n || ' earlier'));
+    BEGIN
+      INSERT INTO public.kitchen_meal_feedback (entry_id, recipe_id, rating) VALUES (eid, rid, 2);
+      ok := FALSE; msg := 'a second rating was allowed';
+    EXCEPTION WHEN unique_violation THEN ok := TRUE; msg := 'refused';
+    END;
+    names := array_append(names, 'one rating per person per dinner'); oks := array_append(oks, ok); details := array_append(details, msg);
+    BEGIN
+      DELETE FROM public.kitchen_meal_feedback WHERE entry_id = eid;
+      ok := FALSE; msg := 'delete was allowed';
+    EXCEPTION WHEN insufficient_privilege THEN ok := TRUE; msg := 'permission denied';
+    END;
+    names := array_append(names, 'nobody can delete dinner feedback through the API'); oks := array_append(oks, ok); details := array_append(details, msg);
+    INSERT INTO public.kitchen_member_profiles (avoids) VALUES ('verify') ON CONFLICT (user_id) DO UPDATE SET avoids = 'verify';
+    SELECT count(*) INTO n FROM public.kitchen_member_profiles WHERE user_id = member;
+    names := array_append(names, 'member can save their own food notes'); oks := array_append(oks, (n = 1)); details := array_append(details, (n || ' rows'));
 
     BEGIN
       DELETE FROM public.kitchen_recipes WHERE id = rid;
@@ -87,6 +111,12 @@ BEGIN
     names := array_append(names, 'stranger sees no cooking history'); oks := array_append(oks, (n = 0)); details := array_append(details, (n || ' rows'));
     SELECT count(*) INTO n FROM public.kitchen_recipe_revisions;
     names := array_append(names, 'stranger sees no old versions'); oks := array_append(oks, (n = 0)); details := array_append(details, (n || ' rows'));
+    SELECT count(*) INTO n FROM public.kitchen_meal_feedback;
+    SELECT count(*) INTO v FROM public.kitchen_member_profiles;
+    names := array_append(names, 'stranger sees no dinner feedback or food notes'); oks := array_append(oks, (n = 0 AND v = 0)); details := array_append(details, (n || ' feedback, ' || v || ' notes'));
+    UPDATE public.kitchen_meal_feedback SET comment = 'pwned' WHERE entry_id = eid;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    names := array_append(names, 'stranger cannot change anyone''s feedback'); oks := array_append(oks, (n = 0)); details := array_append(details, (n || ' rows changed'));
     BEGIN
       INSERT INTO public.kitchen_recipes (id, title) VALUES (rid || '-x', 'Spam');
       ok := FALSE; msg := 'insert was allowed';
@@ -123,6 +153,12 @@ BEGIN
     EXCEPTION WHEN insufficient_privilege THEN ok := TRUE; msg := 'permission denied';
     END;
     names := array_append(names, 'signed-out callers cannot add recipes'); oks := array_append(oks, ok); details := array_append(details, msg);
+    BEGIN
+      SELECT count(*) INTO n FROM public.kitchen_meal_feedback;
+      ok := FALSE; msg := n || ' rows readable';
+    EXCEPTION WHEN insufficient_privilege THEN ok := TRUE; msg := 'permission denied';
+    END;
+    names := array_append(names, 'signed-out callers cannot read dinner feedback'); oks := array_append(oks, ok); details := array_append(details, msg);
 
     RESET ROLE;
     RAISE EXCEPTION 'kitchen-verify-undo';

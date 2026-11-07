@@ -4,6 +4,8 @@ import { normalizeDetails } from "./meat";
 import { EXPORT_APP, EXPORT_FORMAT, newId, normalizePhotos, type ExportBundle, type ImportItem, type ImportResult } from "./recipeModel";
 import { byNewestCook, keysOf, summarize, type RecipeStore, type UpdateResult } from "./recipeStorage";
 import { normalizeSession } from "./cooking/drafts";
+import type { FeedbackInput, MealFeedback, MemberProfile, MemoryLoad, ProfileInput } from "../types/feedback";
+import { makeAgainOf, ratingOf, revisionsOf } from "./familyMemory";
 
 // Family recipes in the ELK Supabase project (supabase/kitchen.sql). Who may
 // read or write is decided there, by the family list; nothing here is a
@@ -19,6 +21,14 @@ type EntryRow = {
   substitutions: string; family_reaction: string; improve_next_time: string; notes: string;
   rating: number | string | null; extra: unknown; created_by: string | null; created_at: string;
 };
+
+type FeedbackRow = {
+  id: string; entry_id: string; recipe_id: string; user_id: string; author_name: string; source: string;
+  rating: number | string | null; comment: string; improvement: string; make_again: string | null;
+  photos: unknown; history: unknown; version: number; created_at: string; updated_at: string;
+};
+type ProfileRow = { user_id: string; avoids: string; likes: string; notes: string; updated_at: string };
+const FEEDBACK_COLS = "id,entry_id,recipe_id,user_id,author_name,source,rating,comment,improvement,make_again,photos,history,version,created_at,updated_at";
 
 const RECIPE_COLS = "id,title,author_name,ingredients,instructions,notes,tags,suggested_tags,approx_calories,legacy,version,created_at,updated_at,removed_at,extra";
 const ENTRY_COLS = "id,recipe_id,cooked_on,cook_name,ingredients_used,substitutions,family_reaction,improve_next_time,notes,rating,extra,created_by,created_at";
@@ -236,6 +246,8 @@ export class SharedRecipeStore implements RecipeStore {
 
   async removeCookingEntry(entryId: string) {
     const { data, error } = await this.client.from("kitchen_cooking_entries").delete().eq("id", entryId).select("id");
+    // 23001 (RESTRICT) / 23503: family members have left feedback on this dinner (kitchen.sql v5 keeps it).
+    if (error?.code === "23001" || error?.code === "23503") throw new Error("Family members have rated this dinner, so it stays — their feedback is theirs.");
     if (error) fail("remove the entry", error);
     if ((data ?? []).length === 0) throw new Error("Only the person who recorded an entry can remove it.");
   }
@@ -281,7 +293,97 @@ export class SharedRecipeStore implements RecipeStore {
     return { recipesAdded, entriesAdded, failed };
   }
 
+  // ── Family memory (kitchen.sql v5) ──
+  private toFeedback = (r: FeedbackRow): MealFeedback => ({
+    id: r.id, entryId: r.entry_id, recipeId: r.recipe_id,
+    authorName: r.author_name || "Someone",
+    rating: ratingOf(r.rating), comment: r.comment, improvement: r.improvement, makeAgain: makeAgainOf(r.make_again),
+    photos: normalizePhotos(r.photos, ""),
+    source: r.source === "device-import" ? "device-import" : "app",
+    version: r.version, history: revisionsOf(r.history), createdAt: r.created_at, updatedAt: r.updated_at,
+    mine: r.source === "app" && r.user_id === this.userId,
+  });
+
+  async listFeedback(): Promise<MemoryLoad<MealFeedback>> {
+    const { data, error } = await this.client.from("kitchen_meal_feedback").select(FEEDBACK_COLS).order("created_at").limit(5000);
+    if (error) {
+      if (isMissingTable(error)) return { status: "not-set-up" };
+      fail("load dinner feedback", error);
+    }
+    return { status: "ready", items: (data as FeedbackRow[]).map(this.toFeedback) };
+  }
+
+  async saveFeedback(entryId: string, input: FeedbackInput, base: MealFeedback | null): Promise<MealFeedback> {
+    const fields = {
+      rating: input.rating, comment: input.comment, improvement: input.improvement,
+      make_again: input.makeAgain, photos: input.photos,
+    };
+    if (base) {
+      const { data, error } = await this.client.from("kitchen_meal_feedback")
+        .update(fields).eq("id", base.id).eq("version", base.version).select(FEEDBACK_COLS);
+      if (error) fail("save your feedback", error);
+      const rows = data as FeedbackRow[];
+      if (rows.length !== 1) throw new Error("Your feedback changed somewhere else first (another phone?). Reload to see it, then try again.");
+      return this.toFeedback(rows[0]);
+    }
+    // recipe_id (from the dinner), user_id and author_name (from the family
+    // list) are set by the database; the placeholder only satisfies NOT NULL.
+    const { data, error } = await this.client.from("kitchen_meal_feedback")
+      .insert({ entry_id: entryId, recipe_id: "-", ...fields }).select(FEEDBACK_COLS).single();
+    if (error) {
+      if (error.code === "23505") throw new Error("You've already given feedback on this dinner — change that one instead.");
+      fail("save your feedback", error);
+    }
+    return this.toFeedback(data as FeedbackRow);
+  }
+
+  // From a phone's backup: kept under the name typed there, read-only, added once.
+  async importFeedback(items: MealFeedback[]): Promise<number> {
+    if (items.length === 0) return 0;
+    const have = await this.existingKeys();
+    const rows = items.filter((f) => have.entryIds.has(f.entryId)).map((f) => ({
+      id: f.id, entry_id: f.entryId, recipe_id: f.recipeId, source: "device-import",
+      author_name: (f.authorName || "Someone").slice(0, 60),
+      rating: f.rating, comment: f.comment, improvement: f.improvement, make_again: f.makeAgain, photos: f.photos,
+    }));
+    if (rows.length === 0) return 0;
+    const { data, error } = await this.client.from("kitchen_meal_feedback")
+      .upsert(rows, { onConflict: "id", ignoreDuplicates: true }).select("id");
+    if (error) fail("import dinner feedback", error);
+    return (data ?? []).length;
+  }
+
+  async listProfiles(): Promise<MemoryLoad<MemberProfile>> {
+    const [profiles, family] = await Promise.all([
+      this.client.from("kitchen_member_profiles").select("user_id,avoids,likes,notes,updated_at"),
+      this.client.from("elk_family_members").select("user_id,display_name"),
+    ]);
+    if (profiles.error) {
+      if (isMissingTable(profiles.error)) return { status: "not-set-up" };
+      fail("load food notes", profiles.error);
+    }
+    const names = new Map(((family.data ?? []) as { user_id: string; display_name: string | null }[])
+      .map((m) => [m.user_id, m.display_name || "Someone"]));
+    return {
+      status: "ready",
+      items: (profiles.data as ProfileRow[]).map((p) => ({
+        key: p.user_id, name: names.get(p.user_id) ?? "Someone", avoids: p.avoids, likes: p.likes, notes: p.notes,
+        updatedAt: p.updated_at, mine: p.user_id === this.userId,
+      })),
+    };
+  }
+
+  async saveMyProfile(input: ProfileInput): Promise<MemberProfile> {
+    const { data, error } = await this.client.from("kitchen_member_profiles")
+      .upsert({ user_id: this.userId, avoids: input.avoids, likes: input.likes, notes: input.notes }, { onConflict: "user_id" })
+      .select("user_id,avoids,likes,notes,updated_at").single();
+    if (error) fail("save your food notes", error);
+    const p = data as ProfileRow;
+    return { key: p.user_id, name: input.name, avoids: p.avoids, likes: p.likes, notes: p.notes, updatedAt: p.updated_at, mine: true };
+  }
+
   async exportAll(): Promise<ExportBundle> {
+    const [feedback, profiles] = await Promise.all([this.listFeedback(), this.listProfiles()]);
     const [recipes, entries, favs] = await Promise.all([
       fetchAll<RecipeRow>("export recipes", (a, b) => this.client.from("kitchen_recipes").select(RECIPE_COLS).order("created_at").order("id").range(a, b)),
       fetchAll<EntryRow>("export cooking history", (a, b) => this.client.from("kitchen_cooking_entries").select(ENTRY_COLS).order("created_at").order("id").range(a, b)),
@@ -296,6 +398,8 @@ export class SharedRecipeStore implements RecipeStore {
       recipes: recipes.map(toRecipe),
       cookingEntries: entries.map(this.toEntry),
       favouriteRecipeIds: favs.map((f) => f.recipe_id),
+      ...(feedback.status === "ready" ? { mealFeedback: feedback.items } : {}),
+      ...(profiles.status === "ready" ? { memberProfiles: profiles.items } : {}),
     };
   }
 }

@@ -6,6 +6,8 @@ import {
   EXPORT_APP, EXPORT_FORMAT, legacyToRecipe, newId, normTitle,
   type ExistingKeys, type ExportBundle, type ImportItem, type ImportResult,
 } from "./recipeModel";
+import type { FeedbackInput, MealFeedback, MemberProfile, MemoryLoad, ProfileInput } from "../types/feedback";
+import { normalizeFeedback, normalizeProfile } from "./familyMemory";
 
 // ── The storage abstraction ──────────────────────────────────────────────────
 // "family": shared in Supabase, family members only (sharedRecipeStore.ts).
@@ -35,6 +37,17 @@ export interface RecipeStore {
   // Adds selected items; never overwrites a recipe or entry that's already there.
   importItems(items: ImportItem[], favouriteRecipeIds: string[]): Promise<ImportResult>;
   exportAll(): Promise<ExportBundle>;
+
+  // ── Family memory (kitchen.sql v5 in shared mode) ──
+  // Every dinner's feedback, from everyone.
+  listFeedback(): Promise<MemoryLoad<MealFeedback>>;
+  // Adds the person's feedback on a dinner, or (with `base`) changes their own;
+  // version-checked like a recipe edit. The previous values are kept.
+  saveFeedback(entryId: string, input: FeedbackInput, base: MealFeedback | null): Promise<MealFeedback>;
+  // Feedback from a backup, added if absent (never overwrites). Returns how many were added.
+  importFeedback(items: MealFeedback[]): Promise<number>;
+  listProfiles(): Promise<MemoryLoad<MemberProfile>>;
+  saveMyProfile(input: ProfileInput): Promise<MemberProfile>;
 }
 
 export function summarize(recipes: Recipe[], entries: { recipeId: string; cookedOn: string }[], favourites: Set<string>): RecipeSummary[] {
@@ -67,6 +80,9 @@ export function keysOf(recipes: Recipe[], entries: { id: string }[]): ExistingKe
 // Written by the original app. Read for migration; never written or removed.
 export const LEGACY_KEY = "elk-kitchen-recipes";
 export const DEVICE_KEY = "elk-kitchen-device-v2";
+// Dinner feedback and food notes given on this phone.
+export const MEMORY_KEY = "elk-kitchen-family-memory-v1";
+type DeviceMemory = { feedback: MealFeedback[]; profiles: MemberProfile[] };
 
 // Records saved before photos and batch details existed lack those fields.
 const withRecipeDefaults = (r: Recipe): Recipe => ({
@@ -293,8 +309,96 @@ export class DeviceRecipeStore implements RecipeStore {
     return { recipesAdded, entriesAdded, failed: [] };
   }
 
+  private loadMemory(): DeviceMemory {
+    try {
+      const m = JSON.parse(this.storage.getItem(MEMORY_KEY) ?? "null") as Partial<DeviceMemory> | null;
+      return {
+        feedback: (Array.isArray(m?.feedback) ? m.feedback : []).map(normalizeFeedback).filter((f): f is MealFeedback => !!f).map((f) => ({ ...f, mine: true })),
+        profiles: (Array.isArray(m?.profiles) ? m.profiles : []).map(normalizeProfile).filter((p): p is MemberProfile => !!p).map((p) => ({ ...p, mine: true })),
+      };
+    } catch {
+      return { feedback: [], profiles: [] };
+    }
+  }
+
+  private saveMemory(m: DeviceMemory) {
+    const previous = this.storage.getItem(MEMORY_KEY);
+    if (previous) {
+      try { JSON.parse(previous); } catch { this.storage.setItem(`${MEMORY_KEY}-unreadable-${this.now()}`, previous); }
+    }
+    this.storage.setItem(MEMORY_KEY, JSON.stringify(m));
+  }
+
+  async listFeedback(): Promise<MemoryLoad<MealFeedback>> {
+    return { status: "ready", items: this.loadMemory().feedback };
+  }
+
+  async saveFeedback(entryId: string, input: FeedbackInput, base: MealFeedback | null): Promise<MealFeedback> {
+    const d = this.load();
+    const entry = d.entries.find((e) => e.id === entryId);
+    if (!entry) throw new Error("That dinner isn't on this device.");
+    const name = input.authorName.trim().slice(0, 60);
+    if (!name) throw new Error("Say who this is from.");
+    const m = this.loadMemory();
+    const now = this.now();
+    const fields = { rating: input.rating, comment: input.comment, improvement: input.improvement, makeAgain: input.makeAgain, photos: input.photos };
+    if (base) {
+      const i = m.feedback.findIndex((f) => f.id === base.id);
+      if (i < 0) throw new Error("That feedback isn't on this device any more.");
+      const cur = m.feedback[i];
+      if (cur.version !== base.version) throw new Error("Someone changed this feedback first — reload to see it.");
+      const next: MealFeedback = {
+        ...cur, ...fields, version: cur.version + 1, updatedAt: now,
+        history: [...cur.history, { version: cur.version, at: cur.updatedAt, rating: cur.rating, comment: cur.comment, improvement: cur.improvement, makeAgain: cur.makeAgain }],
+      };
+      m.feedback[i] = next;
+      this.saveMemory(m);
+      return next;
+    }
+    if (m.feedback.some((f) => f.entryId === entryId && f.authorName.trim().toLowerCase() === name.toLowerCase())) {
+      throw new Error(`${name} has already given feedback on this dinner — change that one instead.`);
+    }
+    const f: MealFeedback = {
+      id: newId(), entryId, recipeId: entry.recipeId, authorName: name, ...fields, source: "this-device",
+      version: 1, history: [], createdAt: now, updatedAt: now, mine: true,
+    };
+    m.feedback.push(f);
+    this.saveMemory(m);
+    return f;
+  }
+
+  async importFeedback(items: MealFeedback[]): Promise<number> {
+    const entryIds = new Set(this.load().entries.map((e) => e.id));
+    const m = this.loadMemory();
+    const have = new Set(m.feedback.map((f) => f.id));
+    let added = 0;
+    for (const f of items) {
+      if (have.has(f.id) || !entryIds.has(f.entryId)) continue;
+      m.feedback.push({ ...f, mine: true });
+      have.add(f.id);
+      added++;
+    }
+    if (added) this.saveMemory(m);
+    return added;
+  }
+
+  async listProfiles(): Promise<MemoryLoad<MemberProfile>> {
+    return { status: "ready", items: this.loadMemory().profiles };
+  }
+
+  async saveMyProfile(input: ProfileInput): Promise<MemberProfile> {
+    const name = input.name.trim().slice(0, 60);
+    if (!name) throw new Error("Say whose food notes these are.");
+    const m = this.loadMemory();
+    const p: MemberProfile = { key: name.toLowerCase(), name, avoids: input.avoids, likes: input.likes, notes: input.notes, updatedAt: this.now(), mine: true };
+    m.profiles = [...m.profiles.filter((x) => x.key !== p.key), p];
+    this.saveMemory(m);
+    return p;
+  }
+
   async exportAll(): Promise<ExportBundle> {
     const d = this.load();
+    const m = this.loadMemory();
     const legacy = readLegacyRaw(this.storage);
     return {
       app: EXPORT_APP,
@@ -304,6 +408,8 @@ export class DeviceRecipeStore implements RecipeStore {
       recipes: d.recipes,
       cookingEntries: d.entries,
       favouriteRecipeIds: d.favouriteRecipeIds,
+      mealFeedback: m.feedback,
+      memberProfiles: m.profiles,
       ...(legacy ? { legacyBrowserRecipes: legacy } : {}),
     };
   }

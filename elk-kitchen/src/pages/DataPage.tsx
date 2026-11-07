@@ -7,6 +7,7 @@ import { IndexedDbPhotoStore, bundleWithPhotos, importPhotos, photoIdsOf, type E
 import { downloadBundle } from "../lib/download";
 import { parseImportFile, planImport, type ImportData, type ImportItem, type ImportResult } from "../lib/recipeModel";
 import { readDeviceData } from "../lib/recipeStorage";
+import type { MealFeedback } from "../types/feedback";
 
 export function DataPage() {
   const { store, deviceStore, photos } = useKitchen();
@@ -17,6 +18,8 @@ export function DataPage() {
   // Photo bytes for the import: from the chosen file, or copied from this device.
   const [filePhotos, setFilePhotos] = useState<ExportedPhoto[]>([]);
   const [fromDevice, setFromDevice] = useState(false);
+  // Family dinner feedback carried in the file (or on this device).
+  const [feedback, setFeedback] = useState<MealFeedback[]>([]);
   const [photoNote, setPhotoNote] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +30,7 @@ export function DataPage() {
     setError(null);
     setPhotoNote(null);
     setFilePhotos(data.photos);
+    setFeedback(data.mealFeedback ?? []);
     setFromDevice(device);
     setResult(null);
     try {
@@ -41,7 +45,9 @@ export function DataPage() {
   function previewDevice() {
     const d = readDeviceData(window.localStorage);
     if (!d) { setError("There are no recipes saved in this browser."); return; }
-    preview({ recipes: d.recipes, entries: d.entries, favouriteRecipeIds: d.favouriteRecipeIds, photos: [] }, "this device", true);
+    deviceStore.listFeedback().then((f) => preview(
+      { recipes: d.recipes, entries: d.entries, favouriteRecipeIds: d.favouriteRecipeIds, photos: [], mealFeedback: f.status === "ready" ? f.items : [] },
+      "this device", true));
   }
 
   useEffect(() => {
@@ -66,8 +72,18 @@ export function DataPage() {
     setError(null);
     try {
       const res = await store.importItems(items, favs);
+      // Feedback after the dinners it's about (only for dinners that are now here).
+      const chosenRecipes = new Set(items.filter((i) => i.selected || i.status === "already-here").map((i) => i.recipe.id));
+      const fb = feedback.filter((f) => chosenRecipes.has(f.recipeId));
+      let feedbackAdded = 0;
+      let feedbackNote = "";
+      try {
+        feedbackAdded = await store.importFeedback(fb);
+      } catch (e) {
+        feedbackNote = ` Dinner feedback wasn't imported (${e instanceof Error ? e.message : String(e)}); it's still in the file.`;
+      }
       // Photos after records: a record never points at a photo that isn't stored.
-      const ids = new Set(photoIdsOf(items));
+      const ids = new Set([...photoIdsOf(items), ...fb.flatMap((f) => f.photos.map((p) => p.id))]);
       let copied = 0;
       let lost = 0;
       if (fromDevice) {
@@ -81,7 +97,8 @@ export function DataPage() {
         copied = await importPhotos(photos, filePhotos.filter((p) => ids.has(p.id)));
         lost = [...ids].filter((id) => !filePhotos.some((p) => p.id === id)).length;
       }
-      setPhotoNote(`${copied} photo${copied === 1 ? "" : "s"} added${lost ? `; ${lost} photo${lost === 1 ? " was" : "s were"} not in the file` : ""}.`);
+      setPhotoNote(`${copied} photo${copied === 1 ? "" : "s"} added${lost ? `; ${lost} photo${lost === 1 ? " was" : "s were"} not in the file` : ""}.`
+        + (fb.length ? ` ${feedbackAdded} dinner rating${feedbackAdded === 1 ? "" : "s"} added (the rest were already here).` : "") + feedbackNote);
       setResult(res);
       // Re-plan so the list reflects what's there now; a second click adds nothing.
       setItems(planImport(
