@@ -13,6 +13,7 @@ import { checkRecipe } from "../lib/pantryCheck";
 import { ContinueCooking } from "./StartCookingPage";
 import { HistoryCard, cookingHistory } from "./HistoryPage";
 import { AskBox } from "./CompanionPage";
+import { SausageDayHome } from "../components/SausageDayHome";
 
 // Matches every word typed, anywhere in the title, ingredients, tags, author or notes.
 export function matchesSearch(r: RecipeSummary, q: string): boolean {
@@ -63,6 +64,8 @@ export function RecipeListPage() {
         </div>
         <Link to="/data" className="shrink-0 text-sm text-sage underline">Backup &amp; import</Link>
       </header>
+
+      <SausageDayHome />
 
       <TonightAsk />
 

@@ -13,6 +13,7 @@ import {
   planProblems, planRecipe, suggestSplit, usableOf, type RecipePlan,
 } from "../lib/sausage/plan";
 import { cutOf } from "../lib/sausage/cuts";
+import { recipePlanOf } from "../lib/sausage/day";
 import { PlanStore, loadPrefs, savePrefs } from "../lib/sausage/preferences";
 import { inputClass, primaryButton, secondaryButton, sectionLabel } from "../components/ui";
 import type { Recipe, RecipeSummary } from "../types/recipe";
@@ -90,7 +91,8 @@ function PlanEditor({ id }: { id: string }) {
 
   const byId = new Map((recipes ?? []).map((r) => [r.id, r]));
   const chosen = plan.recipeIds.map((rid) => byId.get(rid)).filter((r): r is RecipeSummary => !!r);
-  const rplans: RecipePlan[] = chosen.map((r) => planRecipe(r, plan.purchases, plan.alloc[r.id] ?? {}));
+  // A live Sausage Day's choices (optional extras, seasoning changes) apply here too.
+  const rplans: RecipePlan[] = chosen.map((r) => (plan.day ? recipePlanOf(plan, r) : planRecipe(r, plan.purchases, plan.alloc[r.id] ?? {})));
   const problems = planProblems(plan);
   const needed = neededItems(rplans);
   const pantryItems = pantry && pantry !== "off" && pantry.status === "ready" ? pantry.items : null;
@@ -126,7 +128,7 @@ function PlanEditor({ id }: { id: string }) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 pb-24">
-      <Link to="/plan" className="text-sm font-medium text-sage hover:underline">← Plans</Link>
+      <Link to={plan.day ? `/sausage-day/${plan.id}` : "/plan"} className="text-sm font-medium text-sage hover:underline">{plan.day ? "← Back to Sausage Day" : "← Plans"}</Link>
       <input value={plan.title} onChange={(e) => setPlan((p) => ({ ...p, title: e.target.value.slice(0, 120) }), false)} aria-label="Plan name"
         className="mt-2 w-full bg-transparent font-display text-3xl font-bold text-bark focus:outline-none" />
       <p className={`mt-1 inline-block rounded-full px-3 py-1 text-sm font-semibold ${plan.status === "approved" ? "bg-sage text-white" : "bg-butter text-cocoa"}`}>

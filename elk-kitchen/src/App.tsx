@@ -15,6 +15,7 @@ import { BatchJournalPage } from "./pages/BatchJournalPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { CompanionPage } from "./pages/CompanionPage";
 import { PlanPage } from "./pages/PlanPage";
+import { SausageDayPage } from "./pages/SausageDayPage";
 
 // "What should we cook?" (src/prototype — the name is historical). Reads the
 // family's recipes and ELK Pantry, writes nothing; its example ideas and
@@ -42,6 +43,8 @@ function App() {
             <Route path="/tonight" element={<CompanionPage />} />
             <Route path="/plan" element={<PlanPage />} />
             <Route path="/plan/:id" element={<PlanPage />} />
+            <Route path="/sausage-day" element={<SausageDayPage />} />
+            <Route path="/sausage-day/:id" element={<SausageDayPage />} />
             <Route path="/data" element={<DataPage />} />
             <Route path="/ideas/*" element={<Suspense fallback={null}><IdeasPrototype /></Suspense>} />
           </Routes>

@@ -17,6 +17,44 @@ npm run typecheck
 npm run build
 ```
 
+## Sausage Day live (`/sausage-day`, and the red card at the top of the home page)
+
+The whole sausage day as one conversation, built for the owner's 2026-11-07 cook (M632). On the first open that
+week, Kitchen puts the **four handwritten recipes** in the book, word for word (Breakfast, Dinner, Bratwurst,
+Smokies; `src/lib/sausage/today.ts`), and starts the day with **what was bought** (15.501 kg, $194.36) and **where
+the cook stood** (pork ground through the large plate, chicken grinding, beef not confirmed). A recipe already in the
+book under the same name is used as it is. It runs once per phone, and only during that week.
+
+- **Home card**: "SAUSAGE DAY — IN PROGRESS", the four varieties, meat available, progress, the current step of 17,
+  the next action, photos and running timers.
+- **Talk to it** (🎤 keeps listening until you tap stop; replies are spoken; big reply buttons; typing works too).
+  Rules, not AI (`src/lib/sausage/day.ts`): "Chicken is done." → "Great! Let's weigh the chicken. How much usable
+  meat did we get?" → "2.1 kilograms." → usable meat updated, the bone and trim loss recorded and costed → "Ready to
+  divide the batches?" → "yes". Also: "grinding the beef", "not using the beef", "the pork is 8.2 kilos" (both
+  packages, shared by bought weight), "pork butt 2 is 4.6 kg", "approve", "breakfast 10% less salt", "smokies 2 g
+  cayenne", "skip the mace", "all mixed", "breakfast is stuffed" (earlier hands-on steps tick too), "breakfast made
+  30 sausages, 3.95 kilos", "smokies in the freezer", "start a 20 minute timer", "how much salt in the bratwurst?",
+  "what temperature?", "what's next?". Anything else is kept as a note. What was said is logged word for word.
+- **Batches** (`allocate.ts`): each original cut is matched to what was bought by species (pork butt for tenderloin
+  and belly, eye of round for beef, the thighs for chicken), and every recipe is made at the **same share of its
+  card**, so its meat ratios hold. "As written" when there's enough meat; "as much as we can" scales every batch
+  evenly to what the scarcest meat allows. Leftover meat is reported, not spread. Fat is shown for the card's meat and
+  today's mix as a **range from typical cuts** (an estimate). Hand edits stay on `/plan/:id`.
+- **The cards' own numbers never change.** "A little less salt" and the smokies' cayenne (no amount on the card) are
+  questions; the cook's answer is kept beside the card amount for today's batch only. Optional extras (maple syrup,
+  cheddar, mace) stay out until the cook says. Nothing is final until **approve**.
+- **Safety**: 74 °C for any batch with chicken, 71 °C otherwise; keep it cold; smokies are fresh raw sausage, not
+  shelf-stable or ready-to-eat. No cure or smoking process is given. A smoked spice or a name like "Smokies" no longer
+  makes Kitchen treat a recipe as smoked.
+- **At the end**: finished weight, link count (the sausage counter), meat cost per kg and per sausage, cooked / fridge
+  / freezer, a finished photo, then **Save this batch to the recipe**. That writes a normal Kitchen batch (cooking
+  entry) with what really went in, so it's in the recipe's journal and in backups. The family rate it with Kitchen's
+  own per-person dinner feedback. Awards: family favourite, most sausages, best value. **Make this batch again**
+  starts a plan with the same choices and the meat to buy, worked out from that day's real trim.
+
+The day lives on its plan record (`elk-kitchen-sausage-plans-v1`, field `day`) on this phone, like the planner below.
+Saved batches, ratings and photos use Kitchen's existing stores.
+
 ## Sausage day: cook with what I bought (`/plan`)
 
 For batch meat days (built for the owner's 2026-11-07 cook: 15.5 kg of pork butt, beef eye of round and bone-in

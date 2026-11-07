@@ -1,6 +1,12 @@
 # Releasing ELK Kitchen
 
-**Status (2026-11-07, M631):** M631 (Sausage day, `/plan`) is committed on `kitchen-shopping-list` on top of M629. It is
+**Status (2026-11-07, M632):** Sausage Day live (`/sausage-day`, plus the home-page card) is committed on
+`kitchen-shopping-list` on top of M631 and M629. None of the three is pushed or deployed. It works in this-device
+mode, so no SQL is needed. Tests: 171. Check on a phone after deploying: the home page shows **SAUSAGE DAY — IN
+PROGRESS** (only during 7–21 November 2026). Say or type "Chicken is done", then "2.1 kilograms", then "yes", and
+the batches are divided. Reload: everything is still there.
+
+**Earlier status (M631):** M631 (Sausage day, `/plan`) is committed on `kitchen-shopping-list` on top of M629. It is
 not pushed or deployed. It works in this-device mode, so it can ship without any SQL. Same release steps as below.
 Tests: 154.
 

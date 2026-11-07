@@ -5,7 +5,7 @@ import type { CookingSession } from "../../types/cooking";
 import type { BatchPlan, Preferences } from "../../types/sausage";
 import { grams } from "../cooking/parse";
 import { cutOf, isPoultry, type Species } from "./cuts";
-import { amountFor, gramsText } from "./plan";
+import { batchWeighList, gramsText } from "./plan";
 import { grindPhrase } from "./preferences";
 
 export type Stage = "trim" | "chill" | "grind" | "weigh" | "mix" | "test" | "stuff" | "link" | "cook" | "package";
@@ -103,8 +103,8 @@ export function seasoningBasis(s: CookingSession, plan: BatchPlan): { g: number;
 
 export function seasoningList(s: CookingSession, plan: BatchPlan): string {
   const b = seasoningBasis(s, plan);
-  const parts = plan.seasonings.map((x) => {
-    const a = amountFor(x, b.g);
+  const parts = batchWeighList(plan, b.g).map((a) => {
+    const x = a.s;
     if (!a.text) return `${x.name} (no amount in the recipe)`;
     return `${x.name} ${a.text}${x.basis === "volume" && plan.prefs.seasoningsInGrams ? " — the recipe measures it by volume; weigh it once and note the grams" : ""}`;
   });
@@ -126,10 +126,10 @@ export function planAnswer(s: CookingSession, question: string): string | null {
       const w = weighedMeat(s, plan);
       return `Planned: ${plan.meats.map((x) => `${x.name} ${gramsText(x.plannedG)}`).join(", ")} (${gramsText(plan.plannedMeatG)}). Weighed so far: ${w.totalG ? gramsText(w.totalG) : "nothing yet"}.`;
     }
-    const hit = plan.seasonings.find((x) => x.name.toLowerCase().includes(want) || want.includes(x.name.toLowerCase()));
-    if (hit) {
-      const b = seasoningBasis(s, plan);
-      const a = amountFor(hit, b.g);
+    const b = seasoningBasis(s, plan);
+    const a = batchWeighList(plan, b.g).find((x) => x.s.name.toLowerCase().includes(want) || want.includes(x.s.name.toLowerCase()));
+    const hit = a?.s;
+    if (a && hit) {
       return a.text ? `${hit.name}: ${a.text} for ${b.words}.` : `The recipe doesn't give an amount for ${hit.name}, so I won't guess.`;
     }
   }

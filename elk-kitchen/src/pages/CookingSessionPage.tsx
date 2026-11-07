@@ -11,7 +11,7 @@ import { CookingJournal } from "../components/CookingJournal";
 import type { CookingSession, MediaRef, SessionIngredient } from "../types/cooking";
 import { loadPrefs as loadCookingPrefs } from "../lib/sausage/preferences";
 import { STAGES, STAGE_LABEL, STAGE_SAY, seasoningBasis, weighedMeat } from "../lib/sausage/stages";
-import { amountFor, gramsText } from "../lib/sausage/plan";
+import { batchWeighList, gramsText } from "../lib/sausage/plan";
 
 const PREFS_KEY = "elk-kitchen-cooking-prefs-v1";
 type Prefs = { keepListening: boolean; speakReplies: boolean };
@@ -431,9 +431,9 @@ function PlanPanel({ session, onSay }: { session: CookingSession; onSay: (text: 
       <p className="mt-1 text-sm">{w.totalG ? `Weighed: ${gramsText(w.totalG)}${w.complete ? " ✓" : ` — still to weigh: ${w.missing.join(", ")}`}` : "Say each weight: “the pork weighs 3 kilos”."}</p>
       {plan.seasonings.length > 0 && (
         <ul className="mt-2 divide-y divide-butter/10">
-          {plan.seasonings.map((x) => {
-            const a = amountFor(x, basis.g);
-            return <li key={x.raw} className="flex justify-between gap-3 py-1.5"><span>{x.name}{x.cure ? " ⚠" : ""}</span><span className="font-mono text-xl font-bold tabular-nums">{a.text || "—"}</span></li>;
+          {batchWeighList(plan, basis.g).map((a) => {
+            const x = a.s;
+            return <li key={x.raw} className="flex justify-between gap-3 py-1.5"><span>{x.name}{x.cure ? " ⚠" : ""}{a.tweak && <span className="block text-xs text-butter/60">recipe: {a.recipeText || "no amount"} · {a.tweak.reason}</span>}</span><span className="font-mono text-xl font-bold tabular-nums">{a.text || "—"}</span></li>;
           })}
         </ul>
       )}

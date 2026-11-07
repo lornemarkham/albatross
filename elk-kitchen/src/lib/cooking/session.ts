@@ -17,7 +17,7 @@ import { requiredInternalC, seasoningLines } from "../meat";
 import { stepsFromText } from "../../prototype/ideas/cookSteps";
 import type { BatchPlan, Preferences } from "../../types/sausage";
 import { adviceFor, afterWeighing, parseProgress, planAnswer, STAGE_DOING, STAGE_LABEL } from "../sausage/stages";
-import { amountFor } from "../sausage/plan";
+import { weighOut } from "../sausage/plan";
 import { blankPrefs } from "../sausage/preferences";
 import {
   TEMP_LABEL, convert, convertible, durationText, grams, parseCommand, qtySpoken, qtyText, quantityAt, round, tempText, toC, toF,
@@ -178,7 +178,7 @@ function planScale(s: CookingSession, ingredient: string, amount: Qty): string |
   const want = norm(ingredient);
   const hit = s.plan.seasonings.find((x) => norm(x.name).includes(want) || want.includes(norm(x.name)));
   if (g == null || !hit) return null;
-  const a = amountFor(hit, g);
+  const a = weighOut(hit, g, s.plan.tweaks, s.plan.excluded);
   return a.text ? `${hit.name}: ${a.text} for ${qtySpoken(amount)} of meat (from the approved plan's ratio).` : null;
 }
 

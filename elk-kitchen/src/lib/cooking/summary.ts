@@ -8,7 +8,7 @@ import { blankDetails } from "../meat";
 import { TEMP_LABEL, durationText, grams, qtyText, quantityAt, tempText, toC } from "./parse";
 import type { BatchPlan } from "../../types/sausage";
 import { seasoningBasis, weighedMeat } from "../sausage/stages";
-import { amountFor, gramsText } from "../sausage/plan";
+import { batchWeighList, gramsText } from "../sausage/plan";
 
 export const timeOf = (iso: string) => {
   const d = new Date(iso);
@@ -135,7 +135,7 @@ export function planSummary(s: CookingSession, plan: BatchPlan): string[] {
   return [
     `Planned (${plan.planTitle}, approved by ${plan.approvedBy || "the cook"}): ${plan.meats.map((m) => `${m.name} ${gramsText(m.plannedG)}`).join(", ")} = ${gramsText(plan.plannedMeatG)}${fat}.`,
     w.totalG ? `Weighed: ${gramsText(w.totalG)}${w.complete ? "" : ` (not weighed: ${w.missing.join(", ")})`}.` : "Meat weight not said during the cook.",
-    `Seasonings for ${basis.words}: ${plan.seasonings.map((x) => `${x.name} ${amountFor(x, basis.g).text || "(no amount)"}`).join("; ")}.`,
+    `Seasonings for ${basis.words}: ${batchWeighList(plan, basis.g).map((x) => `${x.s.name} ${x.text || "(no amount)"}${x.tweak ? ` (recipe: ${x.recipeText || "no amount"}; ${x.tweak.reason})` : ""}`).join("; ")}.`,
     ...(plan.meatCost != null ? [`Meat cost: $${plan.meatCost.toFixed(2)} (seasonings and casings not counted).`] : []),
   ];
 }

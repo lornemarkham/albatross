@@ -29,7 +29,17 @@ export type Seasoning = {
   perKg: { value: number; unit: string } | null; // volume or count amounts, scaled as written
   from: "seasoning" | "ingredients";
   cure: boolean;
+  // "Maple syrup (optional): 120 ml": the cook decides on the day.
+  optional?: boolean;
+  // "Ice water: 80–100 ml": the top of a written range, per kg like gPerKg / perKg.
+  rangeHi?: number | null;
 };
+
+// A change the cook chose for today's batch. The recipe keeps its own amount;
+// this is shown beside it. `percent` scales the recipe's amount (-10 = 10%
+// less); `grams` is an exact amount the cook gave for this batch (e.g. the
+// cayenne a note mentions without a quantity).
+export type SeasoningTweak = { name: string; percent: number | null; grams: number | null; reason: string; by: string; at: string };
 
 export type SausageKind = "fresh" | "smoked" | "cured" | "fermented";
 
@@ -61,6 +71,9 @@ export type BatchPlan = {
   meatCost: number | null;
   currency: string;
   prefs: Preferences;
+  tweaks?: SeasoningTweak[];
+  // Optional seasonings left out today (lower-case names).
+  excluded?: string[];
 };
 
 export type BatchResult = { finishedG: number | null; count: number | null; servings: number | null };
@@ -84,4 +97,59 @@ export type SausagePlan = {
   // The cooking session started for each recipe.
   sessions: Record<string, string>;
   snapshots: Record<string, BatchPlan>;
+  // The live sausage day (M632). Absent on plans made before it.
+  day?: SausageDay;
+};
+
+// ── The live sausage day ─────────────────────────────────────────────────────
+
+export type MeatStatus = "unknown" | "grinding" | "ground" | "not-using";
+
+// The day's steps, in order. "day" steps happen once; "batch" steps once per recipe.
+export type DayStepKey =
+  | "grind" | "weigh" | "allocate" | "approve"
+  | "weigh-seasonings" | "mix" | "liquids" | "bind" | "sample" | "adjust" | "casings" | "stuff" | "link"
+  | "finished-weight" | "store" | "photo" | "ratings";
+
+export type DayEvent = {
+  id: string;
+  at: string;
+  kind: "said" | "step" | "meat" | "weight" | "plan" | "adjust" | "photo" | "timer" | "result" | "note" | "celebrate";
+  text: string;
+  recipeId: string | null;
+};
+
+// What the assistant asked and is waiting on. Nothing is applied on a guess:
+// "yes" applies `onYes`; anything else leaves it.
+export type DayAwaiting =
+  | { kind: "usable"; purchaseIds: string[]; label: string }
+  | { kind: "divide" }
+  | { kind: "approve" }
+  | { kind: "tweak"; recipeId: string; tweak: SeasoningTweak }
+  | { kind: "tweak-amount"; recipeId: string; name: string; reason: string }
+  | { kind: "cayenne"; recipeId: string };
+
+export type DayPhoto = { id: string; caption: string; addedAt: string; phase: "before" | "during" | "after"; recipeId: string | null };
+
+export type DayTimer = { id: string; label: string; seconds: number; endsAt: string; done: boolean; cancelled: boolean };
+
+export type SausageDay = {
+  // Which pre-filled day this is (e.g. "2026-11-07"), or null for one started by hand.
+  seed: string | null;
+  meat: Record<string, MeatStatus>; // by purchase id
+  equipment: string[];
+  // How big a share of each original recipe to make (1 = as written). Null until chosen.
+  scale: number | null;
+  done: Record<string, DayStepKey[]>; // by recipe id ("" = day-level steps ticked by hand)
+  tweaks: Record<string, SeasoningTweak[]>; // by recipe id
+  optional: Record<string, Record<string, boolean>>; // recipe id → optional seasoning (lower-case) → used today
+  storage: Record<string, "fridge" | "freezer" | "cooked" | "">;
+  photos: DayPhoto[];
+  timers: DayTimer[];
+  log: DayEvent[];
+  awaiting: DayAwaiting | null;
+  // The Kitchen batch (cooking entry) each recipe was saved as.
+  entries: Record<string, string>;
+  lastReply: string;
+  finishedAt: string | null;
 };

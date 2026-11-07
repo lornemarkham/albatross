@@ -11,7 +11,7 @@
 // - Nothing here changes a recipe or Pantry's stock.
 
 import type { Recipe } from "../../types/recipe";
-import type { BatchPlan, BatchResult, Preferences, Purchase, SausageKind, SausagePlan, Seasoning } from "../../types/sausage";
+import type { BatchPlan, BatchResult, Preferences, Purchase, SausageKind, SausagePlan, Seasoning, SeasoningTweak } from "../../types/sausage";
 import { newId } from "../recipeModel";
 import { convert, grams, quantityAt, round } from "../cooking/parse";
 import { cutOf, isPoultry, speciesOf, type Species } from "./cuts";
@@ -111,9 +111,32 @@ export function recipeBaseG(recipe: Recipe): number | null {
 
 const NAME_THEN_AMOUNT = /^(.*?[a-z)])[\s:=,-]+(\d.*)$/i;
 
+const OPTIONAL = /\s*(?:\(optional\)|\boptional\b:?)\s*/i;
+const RANGE = /^(.*?[a-z)])[\s:=,-]+(\d+(?:[.,]\d+)?)\s*(?:–|—|-|to)\s*(\d+(?:[.,]\d+)?)\s*([a-z]+)\s*$/i;
+
 function seasoningFrom(raw: string, baseG: number | null, from: Seasoning["from"]): Seasoning {
   const cure = CURE.test(raw);
-  const s = (name: string, rest: Partial<Seasoning>): Seasoning => ({ name: name.trim() || raw, raw, basis: "none", gPerKg: null, perKg: null, from, cure, ...rest });
+  const optional = OPTIONAL.test(raw);
+  const s = (name: string, rest: Partial<Seasoning>): Seasoning => {
+    const n = name.replace(OPTIONAL, " ").replace(/[\s:,-]+$/, "").trim();
+    return { name: n || raw, raw, basis: "none", gPerKg: null, perKg: null, from, cure, ...(optional ? { optional } : {}), ...rest };
+  };
+  const text = optional ? raw.replace(OPTIONAL, " ").replace(/\s+/g, " ").trim() : raw;
+  // "Ice water: 80–100 ml" — a range, scaled at both ends.
+  const range = RANGE.exec(text);
+  if (range && baseG) {
+    const lo = quantityAt(`${range[2]} ${range[4]}`), hi = quantityAt(`${range[3]} ${range[4]}`);
+    if (lo && hi && lo.qty.unit) {
+      const kg = baseG / 1000;
+      const gl = grams(lo.qty), gh = grams(hi.qty);
+      if (gl != null && gh != null) return s(range[1], { basis: "scaled", gPerKg: round(gl / kg), rangeHi: round(gh / kg) });
+      if (["tsp", "tbsp", "cup", "ml", "l"].includes(lo.qty.unit)) return s(range[1], { basis: "volume", perKg: { value: round(lo.qty.value / kg), unit: lo.qty.unit }, rangeHi: round(hi.qty.value / kg) });
+    }
+  }
+  return parsed(text, baseG, s);
+}
+
+function parsed(raw: string, baseG: number | null, s: (name: string, rest: Partial<Seasoning>) => Seasoning): Seasoning {
   // "Salt 2%", "Salt 18 g/kg", "Salt 18 g per kg"
   const pct = /^(.*?)[\s:=-]*(\d+(?:[.,]\d+)?)\s*%\s*$/.exec(raw);
   if (pct && pct[1].trim()) return s(pct[1], { basis: "percent", gPerKg: round(Number(pct[2].replace(",", ".")) * 10) });
@@ -163,21 +186,64 @@ export function gramsText(g: number): string {
 // What to weigh out for this much meat.
 export function amountFor(s: Seasoning, meatG: number): { text: string; grams: number | null } {
   const kg = meatG / 1000;
-  if (s.gPerKg != null) { const g = round(s.gPerKg * kg); return { text: gramsText(g), grams: g }; }
+  if (s.gPerKg != null) {
+    const g = round(s.gPerKg * kg);
+    if (s.rangeHi != null) return { text: `${fmt1(g)}–${gramsText(round(s.rangeHi * kg))}`, grams: g };
+    return { text: gramsText(g), grams: g };
+  }
   if (s.perKg) {
     // Counts (cloves, pieces) round to a whole one; volumes keep one decimal.
     const v = s.basis === "count" ? Math.max(1, Math.round(s.perKg.value * kg)) : round(s.perKg.value * kg);
+    if (s.rangeHi != null) return { text: `${fmt1(v)}–${fmt1(round(s.rangeHi * kg))} ${s.perKg.unit}`, grams: null };
     const asMl = s.basis === "volume" ? convert({ value: v, unit: s.perKg.unit }, "ml") : null;
     return { text: `${fmt1(v)} ${s.perKg.unit}${asMl && s.perKg.unit !== "ml" ? ` (≈ ${Math.round(asMl.value)} ml)` : ""}`.trim(), grams: null };
   }
   return { text: "", grams: null };
 }
 
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+export const tweakFor = (tweaks: SeasoningTweak[] | undefined, name: string) => [...(tweaks ?? [])].reverse().find((t) => sameName(t.name, name)) ?? null;
+
+export type Weighed = { s: Seasoning; text: string; grams: number | null; recipeText: string; tweak: SeasoningTweak | null; included: boolean; addedToday: boolean };
+
+// What to weigh out today: the recipe's amount for this meat, then the cook's own change (if any).
+export function weighOut(s: Seasoning, meatG: number, tweaks: SeasoningTweak[] | undefined, excluded: string[] | undefined): Weighed {
+  const base = amountFor(s, meatG);
+  const t = tweakFor(tweaks, s.name);
+  const included = !(s.optional && (excluded ?? []).includes(s.name.toLowerCase()));
+  if (!t) return { s, ...base, recipeText: base.text, tweak: null, included, addedToday: false };
+  if (t.grams != null) return { s, text: gramsText(t.grams), grams: t.grams, recipeText: base.text, tweak: t, included, addedToday: false };
+  if (t.percent != null && base.grams != null) {
+    const g = round(base.grams * (1 + t.percent / 100));
+    return { s, text: gramsText(g), grams: g, recipeText: base.text, tweak: t, included, addedToday: false };
+  }
+  return { s, ...base, recipeText: base.text, tweak: t, included, addedToday: false };
+}
+
+// An approved batch's list, with the day's changes, leaving out what was skipped.
+export const batchWeighList = (plan: BatchPlan, meatG: number) => weighList(plan.seasonings, meatG, plan.tweaks, plan.excluded).filter((x) => x.included);
+
+// The full list for a batch: the recipe's seasonings plus anything the cook added today (e.g. cayenne).
+export function weighList(seasonings: Seasoning[], meatG: number, tweaks: SeasoningTweak[] | undefined, excluded: string[] | undefined): Weighed[] {
+  const out = seasonings.map((s) => weighOut(s, meatG, tweaks, excluded));
+  const extra = new Map<string, SeasoningTweak>();
+  for (const t of tweaks ?? []) if (t.grams != null && !seasonings.some((s) => sameName(s.name, t.name))) extra.set(t.name.toLowerCase(), t);
+  for (const t of extra.values()) {
+    const s: Seasoning = { name: t.name, raw: `${t.name} (added today: ${t.reason})`, basis: "none", gPerKg: null, perKg: null, from: "seasoning", cure: false };
+    out.push({ s, text: t.grams ? gramsText(t.grams) : "none", grams: t.grams, recipeText: "", tweak: t, included: (t.grams ?? 0) > 0, addedToday: true });
+  }
+  return out;
+}
+
 export function kindOf(recipe: Recipe): SausageKind {
   const all = `${recipe.title} ${recipe.tags.join(" ")} ${recipe.ingredients} ${recipe.instructions} ${recipe.details.seasoning} ${recipe.notes}`.toLowerCase();
   if (/\b(ferment|starter culture|bactoferm|summer sausage|pepperoni|salami|landj[aä]ger|dry[- ]cured)\b/.test(all)) return "fermented";
   if (CURE.test(all)) return "cured";
-  if (/\bsmok/.test(all) || recipe.details.smokeTempC != null) return "smoked";
+  // Smoked only when the recipe says to smoke it. A name ("Smokies") or a smoked spice
+  // ("smoked paprika") isn't a smoking process, and Kitchen doesn't invent one.
+  const process = `${recipe.tags.join(" ")} ${recipe.ingredients} ${recipe.instructions} ${recipe.details.seasoning} ${recipe.notes}`.toLowerCase()
+    .replace(/\bsmoked (paprika|salt|pepper|chili|chilli|chipotle|sea salt|cheese|cheddar|gouda)\b/g, "");
+  if (/\bsmok/.test(process) || recipe.details.smokeTempC != null) return "smoked";
   return "fresh";
 }
 
@@ -234,7 +300,7 @@ export type RecipePlan = {
   fatPercent: number | null;
   fatTarget: number | null;
   fatAdvice: string;
-  seasonings: { s: Seasoning; text: string; grams: number | null }[];
+  seasonings: Weighed[];
   unscaled: string; // why seasonings couldn't be scaled, or ""
   casing: string;
   substitutions: string[];
@@ -260,7 +326,7 @@ export function fatAdvice(meatG: number, fatPct: number | null, target: number |
   return `About ${fmt1(fatPct)}% fat${est}, richer than the ${target}% the recipe aims for. Swap in some leaner meat (eye of round, chicken) if you want it closer.`;
 }
 
-export function planRecipe(recipe: Recipe, purchases: Purchase[], alloc: Record<string, number>): RecipePlan {
+export function planRecipe(recipe: Recipe, purchases: Purchase[], alloc: Record<string, number>, today: { tweaks?: SeasoningTweak[]; excluded?: string[] } = {}): RecipePlan {
   const meats: MeatUse[] = purchases.filter((p) => (alloc[p.id] ?? 0) > 0).map((p) => {
     const f = fatOf(p);
     return { purchase: p, g: alloc[p.id], fat: f.pct, fatEstimated: f.estimated, measured: usableOf(p).measured };
@@ -269,7 +335,7 @@ export function planRecipe(recipe: Recipe, purchases: Purchase[], alloc: Record<
   const fatPercent = meatG ? round(meats.reduce((n, m) => n + m.g * m.fat, 0) / meatG) : null;
   const fatTarget = recipe.details.fatPercent;
   const seasonings = seasoningsOf(recipe);
-  const scaled = seasonings.map((s) => ({ s, ...amountFor(s, meatG) }));
+  const scaled = weighList(seasonings, meatG, today.tweaks, today.excluded);
   const cannot = seasonings.filter((s) => s.basis === "none" && /\d/.test(s.raw));
   const unscaled = cannot.length && !recipeBaseG(recipe)
     ? "The recipe gives amounts but not how much meat they're for. Add the original meat weight to the recipe (Edit → meat weight) and Kitchen will scale them."
@@ -342,7 +408,7 @@ export function neededItems(plans: RecipePlan[]): { name: string; for: string[] 
     m.set(k, e);
   };
   for (const p of plans) {
-    for (const s of p.seasonings) if (!/^(ice|ice water|water|cold water)$/i.test(s.s.name.trim())) add(s.s.name.replace(/\b(to taste|optional)\b/gi, "").trim(), p.recipe.title);
+    for (const s of p.seasonings) if (s.included && !/^(ice|ice water|water|cold water)$/i.test(s.s.name.trim())) add(s.s.name.replace(/\b(to taste|optional)\b/gi, "").trim(), p.recipe.title);
     if (p.casing) add(p.casing, p.recipe.title);
   }
   return [...m.values()];
@@ -376,8 +442,10 @@ export function snapshot(plan: SausagePlan, p: RecipePlan, prefs: Preferences, a
     approvedAt: now, approvedBy,
     meats: p.meats.map((m) => ({ name: m.purchase.name, plannedG: m.g, fatPercent: m.fat, fatEstimated: m.fatEstimated, measured: m.measured, costPerKg: costPerUsableKg(m.purchase) })),
     plannedMeatG: p.meatG, fatPercent: p.fatPercent, fatTarget: p.fatTarget,
-    seasonings: p.seasonings.map((x) => x.s), substitutions: p.substitutions, safety: p.safety.map((s) => s.text),
+    seasonings: p.seasonings.filter((x) => !x.addedToday).map((x) => x.s), substitutions: p.substitutions, safety: p.safety.map((s) => s.text),
     kind: p.kind, poultry: p.poultry, meatCost: p.meatCost, currency: plan.purchases[0]?.currency ?? "CAD", prefs,
+    tweaks: plan.day?.tweaks[p.recipe.id] ?? [],
+    excluded: p.seasonings.filter((x) => !x.included && !x.addedToday).map((x) => x.s.name.toLowerCase()),
   };
 }
 

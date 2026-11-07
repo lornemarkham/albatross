@@ -14,7 +14,7 @@ const NAME_KEY = "elk-kitchen-feedback-name";
 const AGAIN: { v: MakeAgain; label: string }[] = [{ v: "yes", label: "Yes, again" }, { v: "maybe", label: "Maybe" }, { v: "no", label: "Not again" }];
 const againLabel = (v: MakeAgain | null) => AGAIN.find((a) => a.v === v)?.label ?? "";
 
-export function DinnerFeedback({ entry, favourite, onFavourite }: { entry: CookingEntry; favourite: boolean; onFavourite: (on: boolean) => void }) {
+export function DinnerFeedback({ entry, favourite, onFavourite, onSaved }: { entry: CookingEntry; favourite: boolean; onFavourite: (on: boolean) => void; onSaved?: () => void }) {
   const { store, myName } = useKitchen();
   const shared = store.mode === "family";
   const { data, error, reload } = useLoad(() => store.listFeedback(), [store]);
@@ -36,7 +36,7 @@ export function DinnerFeedback({ entry, favourite, onFavourite }: { entry: Cooki
           <li key={f.id} className="rounded-xl border border-clay bg-white/60 p-3">
             {editing !== null && editing !== "new" && editing.id === f.id ? (
               <FeedbackForm entry={entry} base={f} shared={shared} defaultName={f.authorName}
-                onDone={() => { setEditing(null); reload(); }} onCancel={() => setEditing(null)} />
+                onDone={() => { setEditing(null); reload(); onSaved?.(); }} onCancel={() => setEditing(null)} />
             ) : (
               <FeedbackCard f={f} canEdit={shared ? f.mine : f.source === "this-device"} onEdit={() => setEditing(f)} />
             )}
@@ -46,7 +46,7 @@ export function DinnerFeedback({ entry, favourite, onFavourite }: { entry: Cooki
       {editing === "new" ? (
         <div className="mt-3 rounded-xl border border-sage/40 bg-white/60 p-3">
           <FeedbackForm entry={entry} base={null} shared={shared} defaultName={shared ? myName : ""}
-            onDone={() => { setEditing(null); reload(); }} onCancel={() => setEditing(null)} />
+            onDone={() => { setEditing(null); reload(); onSaved?.(); }} onCancel={() => setEditing(null)} />
         </div>
       ) : (
         editing === null && (!shared || !myOwn) && (

@@ -2,6 +2,7 @@
 // own keys (never the recipe keys). Preferences start blank: Kitchen only
 // uses what the cook set, and they can change it any time.
 import type { Preferences, SausagePlan } from "../../types/sausage";
+import { normalizeDay } from "./day";
 
 export const PREFS_KEY = "elk-kitchen-preferences-v1";
 export const PLANS_KEY = "elk-kitchen-sausage-plans-v1";
@@ -47,6 +48,7 @@ export function normalizePlan(raw: unknown): SausagePlan | null {
     alloc: p.alloc && typeof p.alloc === "object" ? p.alloc : {},
     status: p.status === "approved" ? "approved" : "draft", approvedAt: p.approvedAt ?? null, approvedBy: p.approvedBy ?? "",
     have: Array.isArray(p.have) ? p.have : [], results: p.results ?? {}, sessions: p.sessions ?? {}, snapshots: p.snapshots ?? {},
+    ...(p.day ? { day: normalizeDay(p.day) } : {}),
   };
 }
 
