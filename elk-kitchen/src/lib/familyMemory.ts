@@ -1,7 +1,7 @@
 // What the family has said about its dinners, in a form suggestions can use.
 // Only recorded words and numbers: nothing here guesses a taste (doctrine §4).
 
-import type { FeedbackRevision, MakeAgain, MealFeedback, MemberProfile } from "../types/feedback";
+import type { FeedbackRevision, FeedbackScores, MakeAgain, MealFeedback, MemberProfile } from "../types/feedback";
 import { normalizePhotos } from "./recipeModel";
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -10,13 +10,18 @@ const rating = (v: unknown) => {
   return Number.isFinite(n) && n >= 0 && n <= 10 ? Math.round(n * 10) / 10 : null;
 };
 const makeAgain = (v: unknown): MakeAgain | null => (v === "yes" || v === "maybe" || v === "no" ? v : null);
+export function scoresOf(v: unknown): FeedbackScores {
+  const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  return { flavour: rating(o.flavour), seasoning: rating(o.seasoning), texture: rating(o.texture), juiciness: rating(o.juiciness) };
+}
+export const hasScores = (s: FeedbackScores | undefined) => !!s && Object.values(s).some((v) => v != null);
 
 function revisions(v: unknown): FeedbackRevision[] {
   if (!Array.isArray(v)) return [];
   return v.map((x) => {
     const o = (x ?? {}) as Record<string, unknown>;
     return {
-      version: Number(o.version) || 0, at: str(o.at), rating: rating(o.rating), comment: str(o.comment),
+      version: Number(o.version) || 0, at: str(o.at), rating: rating(o.rating), ...(o.scores ? { scores: scoresOf(o.scores) } : {}), comment: str(o.comment),
       improvement: str(o.improvement), makeAgain: makeAgain(o.make_again ?? o.makeAgain),
     };
   });
@@ -31,6 +36,7 @@ export function normalizeFeedback(v: unknown): MealFeedback | null {
     id, entryId, recipeId,
     authorName: str(o.authorName).slice(0, 60),
     rating: rating(o.rating),
+    scores: scoresOf(o.scores),
     comment: str(o.comment), improvement: str(o.improvement), makeAgain: makeAgain(o.makeAgain),
     photos: normalizePhotos(o.photos, ""),
     source: o.source === "app" || o.source === "device-import" ? o.source : "this-device",

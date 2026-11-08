@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- ELK Kitchen — shared family recipes — v5
+-- ELK Kitchen — shared family recipes — v6
 -- Run in: Supabase Dashboard → SQL Editor → paste → Run. Safe to re-run.
 --
 -- Uses the ELK project's existing family list (public.elk_family_members and
@@ -17,6 +17,8 @@
 --   kitchen_meal_feedback     v5: each person's own say about a dinner (rating, comment,
 --                             photos, "make it again?", an improvement); edits keep history
 --   kitchen_member_profiles   v5: each person's own food notes (avoids/allergies, likes)
+--   v6: kitchen_meal_feedback.scores — each person's optional flavour / seasoning /
+--       texture / juiciness scores (0–10) beside their overall rating. Additive.
 --
 -- Safety rules enforced here, not just in the app:
 --   • only family members can read or write anything
@@ -269,6 +271,19 @@ CREATE INDEX IF NOT EXISTS kitchen_meal_feedback_entry_idx ON public.kitchen_mea
 CREATE UNIQUE INDEX IF NOT EXISTS kitchen_meal_feedback_one_each
   ON public.kitchen_meal_feedback (entry_id, user_id) WHERE source = 'app';
 
+-- v6: optional detail scores, each person's own: {"flavour": 8, "seasoning": 6, "texture": null, "juiciness": 9}.
+-- A score nobody gave is absent or null, never zero. Existing rows get '{}'.
+CREATE OR REPLACE FUNCTION public.kitchen_scores_valid_(s JSONB)
+RETURNS BOOLEAN LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT jsonb_typeof(s) = 'object' AND length(s::text) <= 400 AND NOT EXISTS (
+    SELECT 1 FROM jsonb_each(s) AS e(k, v)
+    WHERE k NOT IN ('flavour', 'seasoning', 'texture', 'juiciness')
+       OR (jsonb_typeof(v) <> 'null' AND (jsonb_typeof(v) <> 'number' OR (v::text)::numeric NOT BETWEEN 0 AND 10)))
+$$;
+ALTER TABLE public.kitchen_meal_feedback ADD COLUMN IF NOT EXISTS scores JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE public.kitchen_meal_feedback DROP CONSTRAINT IF EXISTS kitchen_meal_feedback_scores_check;
+ALTER TABLE public.kitchen_meal_feedback ADD CONSTRAINT kitchen_meal_feedback_scores_check CHECK (public.kitchen_scores_valid_(scores));
+
 -- Runs as the caller, so it sees only what they may see (a stranger finds no dinner).
 CREATE OR REPLACE FUNCTION public.kitchen_meal_feedback_stamp()
 RETURNS TRIGGER LANGUAGE plpgsql SET search_path = '' AS $$
@@ -292,7 +307,7 @@ BEGIN
     NEW.author_name := OLD.author_name; NEW.source := OLD.source; NEW.created_at := OLD.created_at;
     NEW.version := OLD.version + 1;
     NEW.history := OLD.history || jsonb_build_array(jsonb_build_object(
-      'version', OLD.version, 'at', OLD.updated_at, 'rating', OLD.rating, 'comment', OLD.comment,
+      'version', OLD.version, 'at', OLD.updated_at, 'rating', OLD.rating, 'scores', OLD.scores, 'comment', OLD.comment,
       'improvement', OLD.improvement, 'make_again', OLD.make_again, 'photos', OLD.photos));
   END IF;
   NEW.updated_at := NOW();

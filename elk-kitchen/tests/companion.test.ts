@@ -32,7 +32,7 @@ const recipe = (id: string, title: string, ingredients: string, over: Partial<Re
 const pantryItem = (name: string, onHand: number, unit: string, location: string, bestBefore: string | null = null): PantryItem =>
   ({ name, onHand, unit, location, bestBefore, places: [{ location, quantity: onHand, bestBefore }] });
 const fb = (over: Partial<MealFeedback>): MealFeedback => ({
-  id: Math.random().toString(36).slice(2), entryId: "e1", recipeId: "r", authorName: "Lorne", rating: null, comment: "", improvement: "",
+  id: Math.random().toString(36).slice(2), entryId: "e1", recipeId: "r", authorName: "Lorne", rating: null, scores: { flavour: null, seasoning: null, texture: null, juiciness: null }, comment: "", improvement: "",
   makeAgain: null, photos: [], source: "app", version: 1, history: [], createdAt: "2026-10-20T18:00:00Z", updatedAt: "2026-10-20T18:00:00Z", mine: false, ...over,
 });
 

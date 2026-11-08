@@ -7,7 +7,7 @@ import {
   type ExistingKeys, type ExportBundle, type ImportItem, type ImportResult,
 } from "./recipeModel";
 import type { FeedbackInput, MealFeedback, MemberProfile, MemoryLoad, ProfileInput } from "../types/feedback";
-import { normalizeFeedback, normalizeProfile } from "./familyMemory";
+import { normalizeFeedback, normalizeProfile, scoresOf } from "./familyMemory";
 
 // ── The storage abstraction ──────────────────────────────────────────────────
 // "family": shared in Supabase, family members only (sharedRecipeStore.ts).
@@ -341,7 +341,7 @@ export class DeviceRecipeStore implements RecipeStore {
     if (!name) throw new Error("Say who this is from.");
     const m = this.loadMemory();
     const now = this.now();
-    const fields = { rating: input.rating, comment: input.comment, improvement: input.improvement, makeAgain: input.makeAgain, photos: input.photos };
+    const fields = { rating: input.rating, scores: scoresOf(input.scores), comment: input.comment, improvement: input.improvement, makeAgain: input.makeAgain, photos: input.photos };
     if (base) {
       const i = m.feedback.findIndex((f) => f.id === base.id);
       if (i < 0) throw new Error("That feedback isn't on this device any more.");
@@ -349,7 +349,7 @@ export class DeviceRecipeStore implements RecipeStore {
       if (cur.version !== base.version) throw new Error("Someone changed this feedback first — reload to see it.");
       const next: MealFeedback = {
         ...cur, ...fields, version: cur.version + 1, updatedAt: now,
-        history: [...cur.history, { version: cur.version, at: cur.updatedAt, rating: cur.rating, comment: cur.comment, improvement: cur.improvement, makeAgain: cur.makeAgain }],
+        history: [...cur.history, { version: cur.version, at: cur.updatedAt, rating: cur.rating, scores: cur.scores, comment: cur.comment, improvement: cur.improvement, makeAgain: cur.makeAgain }],
       };
       m.feedback[i] = next;
       this.saveMemory(m);

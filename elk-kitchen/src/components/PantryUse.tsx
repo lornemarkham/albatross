@@ -50,6 +50,12 @@ export function PantryUse({ session, update, defaultName }: { session: CookingSe
       {session.ingredients.filter((i) => !i.removed).map((i) => (
         <UseRow key={i.id} label={`${i.name} · ${qtyText(i.qty)} said`} items={items} suggested={candidates(i.name, items)} onDone={record} client={client} />
       ))}
+      {/* Cooking a chef idea: what it planned to use from Pantry, offered one by one (nothing is taken until confirmed). */}
+      {(session.draft?.ingredients ?? [])
+        .filter((d) => d.status === "have" && d.evidence.startsWith("Pantry") && !session.ingredients.some((i) => !i.removed && i.name.toLowerCase() === d.name.toLowerCase()))
+        .map((d) => (
+          <UseRow key={`draft-${d.name}`} label={`${d.name} · planned in the idea${d.amount ? ` (${d.amount})` : ""}`} items={items} suggested={candidates(d.name, items)} onDone={record} client={client} />
+        ))}
       <UseRow label="Something else from Pantry" items={items} suggested={[]} onDone={record} client={client} />
 
       <Finished items={items} defaultName={defaultName} madeOn={dateOf(session.startedAt)} onDone={record} client={client} />

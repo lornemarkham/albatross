@@ -84,7 +84,42 @@ and cost. **Preferences** (grind, plate, grams, goals) start blank and are edite
 are kept on this device (`elk-kitchen-sausage-plans-v1`, `elk-kitchen-preferences-v1`), not in backups yet; the
 batch record (which is backed up) carries the approved plan.
 
-## The family cooking companion (`/tonight`, and the box at the top of the home page)
+## Kitchen's chef (`/tonight`, and the box at the top of the home page) — M639
+
+A cooking conversation, typed or spoken. Example: "I made bratwurst yesterday. I also have nacho chips and cheese. What
+can I make for game day?" Code is in `src/lib/chef/*`; the page is `CompanionPage.tsx`.
+
+- **What we have**: foods you can tap to pick, from Recently made (Kitchen's cooking history and Sausage Day), Use soon
+  (best-before within 4 days, opened packages, leftovers, or anything you asked to use), Refrigerator, Freezer, Pantry
+  and Food storage (sorted from Inventory's batch places), and You told Kitchen. Anything past its best-before date is
+  listed and never planned around.
+- **Just tell Kitchen**: "I have nacho chips", "there's half a bag of cheese", "I found some peppers", "we need to use
+  the sour cream", "I made bratwurst yesterday". Amounts stay as you said them. These are the conversation's words, not
+  stock. Kitchen offers **Add to Inventory?** for anything Inventory lacks, but only in shared mode, one food at a time,
+  with a whole-number count and a place. That goes through Inventory's `pantry_receive` with a retry-safe id, after you
+  confirm.
+- **Answers**: Kitchen's own dish ideas, built from 16 well-known templates (nachos, queso, sliders, quesadillas, hash,
+  fried rice…). Each ingredient is marked ✓ (with its evidence), Need, Optional or Basic. You also get the family's
+  recipes that fit, but never the sausage or jerky recipe that made the ingredient. Each family member's recorded notes
+  are shown on the dish ("Kathy on Bratwurst: 'a little less salt'"), along with avoids and split opinions.
+- **AI chef** (family sign-in plus a server key; [`docs/decisions/0002`](docs/decisions/0002-kitchen-ai-chef.md)):
+  asked automatically after Kitchen's own answer. It suggests new recipes ("✨ AI recipe · not a family recipe") and
+  picks from family recipes. A ✓ survives only where Kitchen has evidence; everything else shows as Need. When the AI
+  is off, offline or signed out, the page says so quietly and Kitchen's own answer stands.
+- **Shopping**: missing items are ticked and extras unticked. They go to Pantry's list via `pantry_shopping_add` (shared
+  mode), or you copy them to the clipboard (this-device mode).
+- **Cook this**: starts Start cooking with the idea's steps and ingredients, so you can ask "what's next?" or "how much
+  cheese?". Review saves it as a new recipe tagged `kitchen-idea` / `ai-generated`, noting where it came from. Pantry use
+  lists the idea's Inventory ingredients, and each one is confirmed through `pantry_use`. Then **How was dinner?**
+  (everyone rates on their own, now with optional flavour / seasoning / texture / juiciness), then "What we learned" and
+  "Make an improved version" on the batch page.
+- **What Kitchen has learned**: per person: favourites, not for me, avoids and likes, and seasoning leanings quoted from
+  what they wrote. Household favourites need 2+ people who all rated it 7+. It also shows split opinions, recipes worth
+  repeating, and versions the same people rated higher.
+
+The conversation is kept in this browser tab (`sessionStorage`) and is never stock.
+
+## The family cooking companion (rules underneath the chef)
 
 Ask in plain words, typed or spoken (🎤 listens for **one** request after a tap, then stops):
 "What should we cook tonight?", "What can I make with what we have?", "We need to use the leftover chicken",
@@ -109,9 +144,7 @@ Kitchen never changes stock from here.
 **Food notes** (on `/tonight`): each person writes what they avoid and like. In shared mode only the person can write
 their own notes, and the family can read them. Kitchen flags; it is not an allergy check.
 
-**✨ AI second opinion** (optional, shared mode only, switched off until the owner adds a key): see
-[`docs/decisions/0001-kitchen-ai-endpoint.md`](docs/decisions/0001-kitchen-ai-endpoint.md). It picks only among the
-family's recipes it was sent, its words are labelled AI, and Pantry facts on the page always come from Pantry.
+**✨ AI**: the page now uses the chef mode above (0002). The endpoint still accepts 0001's "second opinion" requests.
 
 ## Family dinner feedback ("How was dinner?" on each batch's journal)
 
@@ -360,7 +393,7 @@ kept as audio and aren't transcribed. Clips and voice notes in shared mode need 
   import** writes one JSON file that includes the photos, and restoring it adds
   without overwriting. Take a backup after each cook until the shared database
   is switched on.
-- **Shared mode** needs, in order: `kitchen.sql` (v5 adds family dinner feedback and food notes; v3 adds an `extra` JSON column
+- **Shared mode** needs, in order: `kitchen.sql` (v6 adds each person's flavour / seasoning / texture / juiciness scores on dinner feedback; v5 adds family dinner feedback and food notes; v3 adds an `extra` JSON column
   to the recipe and batch tables; v4 lets a batch's `extra` hold a cooking session, up to
   1 000 000 characters; additive, re-runnable), then
   `kitchen-photos.sql` (v2: private `kitchen-photos` bucket for photos, clips and voice

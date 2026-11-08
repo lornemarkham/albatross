@@ -60,7 +60,7 @@ export function TastingPage() {
         {fam.raters > 0 && <p className="mt-2 text-lg font-bold text-bark">Family average: {fam.average.overall}/10 <span className="text-sm font-normal text-bark/70">({fam.raters} {fam.raters === 1 ? "person" : "people"})</span></p>}
         <p className="mt-2 text-xs text-bark/60">
           {shared
-            ? "Overall ratings are shared with the family. Seasoning, texture and juiciness scores stay on this phone until the shared database is updated."
+            ? "Ratings are shared with the family. Seasoning, texture and juiciness are shared once the family database has kitchen.sql v6; until then they stay on this card, on this phone."
             : "These are the ratings given on this phone. Ratings from other phones or accounts only appear here once the family database is set up."}
         </p>
       </section>

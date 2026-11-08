@@ -8,15 +8,15 @@ import { PhotoImg } from "../components/Photos";
 import { inputClass } from "../components/ui";
 import { matchesSearch } from "./RecipeListPage";
 import type { Recipe } from "../types/recipe";
-import type { CookingSession } from "../types/cooking";
+import type { CookDraft, CookingSession } from "../types/cooking";
 import { clock } from "../lib/cooking/parse";
 
 export function useStartCooking() {
   const drafts = useDrafts();
   const { myName } = useKitchen();
   const navigate = useNavigate();
-  return (recipe: Recipe | null, title = "") => {
-    const s = newSession({ recipe, title, cookName: myName, now: new Date().toISOString() });
+  return (recipe: Recipe | null, title = "", draft: CookDraft | null = null) => {
+    const s = newSession({ recipe, title, cookName: myName, now: new Date().toISOString(), draft });
     drafts.put(s);
     navigate(`/cook/${encodeURIComponent(s.id)}`);
   };

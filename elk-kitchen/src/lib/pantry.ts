@@ -30,6 +30,12 @@ function unitOf(item: ItemRow): string {
   return typeof u === "string" && u.trim() ? u.trim() : "items";
 }
 
+// Inventory's item form stores "opened" / "unopened" (InventoryForm, "Opened?").
+function openedOf(item: ItemRow): boolean | null {
+  const v = item.attributes?.opened;
+  return v === "opened" ? true : v === "unopened" ? false : null;
+}
+
 function lowStockOf(item: ItemRow): number | null {
   const v = item.attributes?.lowStockAt;
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -50,8 +56,11 @@ export function summarizePantry(items: ItemRow[], lots: LotRow[]): PantryItem[] 
       unit: unitOf(item),
       bestBefore: dates[0] ?? null,
       location: open[0]?.location?.trim() ?? "",
-      places: open.map((l) => ({ location: l.location?.trim() ?? "", quantity: l.quantity_remaining, bestBefore: l.best_before })),
+      places: open.map((l) => ({ location: l.location?.trim() ?? "", quantity: l.quantity_remaining, bestBefore: l.best_before, receivedOn: l.purchased_on ?? l.created_at.slice(0, 10) })),
       lowStockAt: lowStockOf(item),
+      itemId: item.id,
+      opened: openedOf(item),
+      lastReceivedOn: open.map((l) => l.purchased_on ?? l.created_at.slice(0, 10)).sort().pop() ?? null,
     };
   }).filter((p) => p.name);
 }

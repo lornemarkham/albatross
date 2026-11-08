@@ -1,5 +1,14 @@
 # Releasing ELK Kitchen
 
+**Status (2026-11-08, M639):** Kitchen's chef (Inventory-aware conversation, dish ideas, AI chef with an evidence check,
+family tastes, cook a suggested dish, detail scores, full-phone backup) is committed on `kitchen-shopping-list` on
+top of `694e0d6`. It is **not pushed or deployed**: this mission had no release authority. Tests: 198. This-device mode
+needs no SQL and works as before, plus the chef with Kitchen's own ideas. **Shared mode** now needs `kitchen.sql`
+**v6** (additive: a `scores` column and its check; 28 verify checks). A v5 database still works: ratings save, and the
+detail scores are flagged as "not shared yet". The AI chef needs the key and the variables in step 7 below (see
+`docs/decisions/0002`). Check on a phone after deploying: `/tonight`, then ask the game-day question. You should get
+three snack ideas built on yesterday's bratwurst, then **Cook this** → Finish → Save → rate.
+
 **Status (2026-11-08, M635):** Finish Sausage Day is committed on `kitchen-shopping-list` on top of `d487b76`
 (M634 shipped that one). Not pushed, not deployed: `~/forge/data/release-policy.json` still has no `kitchen` entry.
 This-device mode, so no SQL is needed. Tests: 180. What it adds: `/sausage-day/:id/finish` (say which sausages were
@@ -92,8 +101,8 @@ FAIL.
    2026-10-11: family list and Pantry present, **no `kitchen_*` tables**.
 3. **Inventory first** (Inventory workspace, not Kitchen): the shopping list needs Inventory's `supabase-pantry.sql`
    from `pantry-family-kitchen` @ `8bf1753` (re-run; additive). Deploying that Inventory build is Inventory's release.
-4. **Supabase SQL Editor**, in order: `supabase/kitchen.sql` (v5), then `supabase/kitchen-photos.sql` (v2), then
-   `supabase/kitchen-verify.sql`. Every row must be **PASS** (26 checks: member, stranger and signed-out, now including
+4. **Supabase SQL Editor**, in order: `supabase/kitchen.sql` (v6), then `supabase/kitchen-photos.sql` (v2), then
+   `supabase/kitchen-verify.sql`. Every row must be **PASS** (28 checks, now including v6 detail scores: member, stranger and signed-out, now including
    dinner feedback and food notes). Then:
    `SELECT tablename, policyname FROM pg_policies WHERE tablename LIKE 'kitchen_%';` — every policy names `elk_is_family_member`.
 5. **Family list**: add the second family member's account to `elk_family_members` (Inventory's `docs/family-access.md`),

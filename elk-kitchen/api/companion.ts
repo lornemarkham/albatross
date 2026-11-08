@@ -1,4 +1,6 @@
-// ── /api/companion — Kitchen's optional AI pass (docs/decisions/0001, PROPOSED) ──
+// ── /api/companion — Kitchen's AI (docs/decisions/0001 and 0002, PROPOSED) ──
+// Two modes, one gate: the original "second opinion" over the family's recipes
+// (0001), and `mode: "chef"` — the cooking conversation (0002, src/lib/chef/ai.ts).
 // The ONLY place Kitchen reads OPENAI_API_KEY; it never reaches the browser.
 // Vercel Edge Function, Web-standard Request/Response, no npm dependency.
 //
@@ -9,15 +11,20 @@
 // are all the person sees.
 
 import { AI_RESPONSE_SCHEMA, AI_SYSTEM_PROMPT, checkAiReply, parseAiRequest } from "../src/lib/companion/ai";
+import { CHEF_RESPONSE_SCHEMA, CHEF_SYSTEM_PROMPT, checkChefReply, parseChefRequest } from "../src/lib/chef/ai";
 
 export const config = { runtime: "edge" };
 
-const MODEL = "gpt-4o-mini";
+// Same provider and model as ELK Inventory's /api/extract. KITCHEN_AI_MODEL overrides it
+// (server-side setting in Vercel) without a code change.
+const DEFAULT_MODEL = "gpt-4o-mini";
 const TIMEOUT_MS = 20_000;
+const CHEF_TIMEOUT_MS = 22_000;
+const CHEF_MAX_TOKENS = 2_200;
 const CHECK_TIMEOUT_MS = 5_000;
 const MAX_BODY_CHARS = 60_000;
 
-type Env = { openaiKey?: string; supabaseUrl?: string; anonKey?: string; fetchImpl?: typeof fetch };
+type Env = { openaiKey?: string; supabaseUrl?: string; anonKey?: string; model?: string; fetchImpl?: typeof fetch };
 
 const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -51,6 +58,8 @@ export async function handle(request: Request, env: Env): Promise<Response> {
   if (text.length > MAX_BODY_CHARS) return json({ error: "That request is too big." }, 413);
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { return json({ error: "Invalid request body" }, 400); }
+  const MODEL = env.model?.trim() || DEFAULT_MODEL;
+  if ((parsed as { mode?: unknown } | null)?.mode === "chef") return chef(parsed, env, MODEL);
   const req = parseAiRequest(parsed);
   if (!req) return json({ error: "Invalid request body" }, 400);
 
@@ -80,10 +89,43 @@ export async function handle(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function chef(parsed: unknown, env: Env, model: string): Promise<Response> {
+  const req = parseChefRequest(parsed);
+  if (!req) return json({ error: "Invalid request body" }, 400);
+  try {
+    const res = await (env.fetchImpl ?? fetch)("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.openaiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        temperature: 0.7,
+        max_tokens: CHEF_MAX_TOKENS,
+        messages: [{ role: "system", content: CHEF_SYSTEM_PROMPT }, { role: "user", content: JSON.stringify(req) }],
+        response_format: { type: "json_schema", json_schema: { name: "kitchen_chef", strict: true, schema: CHEF_RESPONSE_SCHEMA } },
+      }),
+      signal: AbortSignal.timeout(CHEF_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      console.error(`[api/companion chef] model returned ${res.status}`);
+      return json({ error: "Kitchen's AI couldn't answer just now." }, 502);
+    }
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+    const content = body.choices?.[0]?.message?.content;
+    if (!content) return json({ error: "Kitchen's AI couldn't answer just now." }, 502);
+    // Token counts only (no content) so the owner can see real usage in Vercel's logs.
+    if (body.usage) console.log(`[api/companion chef] ${model} tokens in=${body.usage.prompt_tokens ?? "?"} out=${body.usage.completion_tokens ?? "?"}`);
+    return json({ reply: checkChefReply(JSON.parse(content), req), model }, 200);
+  } catch (err) {
+    console.error("[api/companion chef] failed:", err instanceof Error ? err.name : "error");
+    return json({ error: "Kitchen's AI couldn't answer just now." }, 502);
+  }
+}
+
 export default function handler(request: Request): Promise<Response> {
   return handle(request, {
     openaiKey: process.env.OPENAI_API_KEY,
     supabaseUrl: process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL,
     anonKey: process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY,
+    model: process.env.KITCHEN_AI_MODEL,
   });
 }

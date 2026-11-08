@@ -70,5 +70,7 @@ export async function mirrorToFeedback(store: RecipeStore, entryId: string, t: T
   const fb = await store.listFeedback();
   if (fb.status !== "ready") return;
   const mine = fb.items.find((f) => f.entryId === entryId && (store.mode === "family" ? f.mine : f.authorName.trim().toLowerCase() === t.author.trim().toLowerCase()));
-  await store.saveFeedback(entryId, { authorName: t.author, rating: t.scores.overall, comment: t.notes, improvement: t.change, makeAgain: t.makeAgain, photos: t.photos }, mine ?? null);
+  // The card's seasoning / texture / juiciness go with it (kitchen.sql v6 in shared mode; kept on the card either way).
+  const scores = { flavour: mine?.scores.flavour ?? null, seasoning: t.scores.seasoning, texture: t.scores.texture, juiciness: t.scores.juiciness };
+  await store.saveFeedback(entryId, { authorName: t.author, rating: t.scores.overall, scores, comment: t.notes, improvement: t.change, makeAgain: t.makeAgain, photos: t.photos }, mine ?? null);
 }

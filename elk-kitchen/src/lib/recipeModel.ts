@@ -1,4 +1,5 @@
 import type { CookingEntry, LegacyRecipe, PhotoRef, Recipe, RecipeKind } from "../types/recipe";
+import { parseDeviceRecords, type DeviceRecords } from "./deviceRecords";
 import { blankDetails, normalizeDetails } from "./meat";
 import type { ExportedPhoto } from "./photos";
 import { normalizeSession } from "./cooking/drafts";
@@ -103,6 +104,8 @@ export type ExportBundle = {
   // older files simply don't have them).
   mealFeedback?: MealFeedback[];
   memberProfiles?: MemberProfile[];
+  // This phone's Sausage Days, tasting cards and recipe versions (added later; deviceRecords.ts).
+  deviceRecords?: DeviceRecords;
 };
 
 export type ImportData = {
@@ -111,6 +114,7 @@ export type ImportData = {
   favouriteRecipeIds: string[];
   photos: ExportedPhoto[];
   mealFeedback?: MealFeedback[];
+  deviceRecords?: DeviceRecords;
 };
 
 export function exportFileName(bundle: ExportBundle): string {
@@ -160,6 +164,8 @@ export function parseImportFile(text: string, now: string): ImportData {
       }
     }
   }
+  const device = parseDeviceRecords(b.deviceRecords);
+  if (device) data.deviceRecords = device;
   return data;
 }
 

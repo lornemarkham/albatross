@@ -3,7 +3,7 @@ import { useKitchen } from "../../context/KitchenContext";
 import type { Recipe } from "../../types/recipe";
 import type { CookingSession } from "../../types/cooking";
 import { SessionDrafts } from "./drafts";
-import { activeTimers, endTimer } from "./session";
+import { activeTimers, draftRecipe, endTimer } from "./session";
 import { ring } from "./device";
 
 export const useDrafts = () => useMemo(() => new SessionDrafts(window.localStorage), []);
@@ -21,13 +21,14 @@ export function useCookingSession(id: string) {
   useEffect(() => { setSession(drafts.get(id) ?? null); }, [id, drafts]);
 
   const recipeId = session?.recipeId ?? null;
+  const hasDraft = !!session?.draft;
   useEffect(() => {
-    if (!recipeId) { setRecipe(null); return; }
+    if (!recipeId) { setRecipe(session ? draftRecipe(session) : null); return; }
     let cancelled = false;
     store.getRecipe(recipeId).then((d) => { if (!cancelled) setRecipe(d?.recipe ?? null); },
       (e: unknown) => { if (!cancelled) { setRecipe(null); setRecipeError(e instanceof Error ? e.message : String(e)); } });
     return () => { cancelled = true; };
-  }, [recipeId, store]);
+  }, [recipeId, store, hasDraft]);
 
   const update = useCallback((f: (s: CookingSession) => CookingSession) => {
     const cur = latest.current;

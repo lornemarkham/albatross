@@ -68,6 +68,16 @@ BEGIN
     UPDATE public.kitchen_meal_feedback SET rating = 8 WHERE entry_id = eid AND user_id = member RETURNING version INTO v;
     SELECT jsonb_array_length(history) INTO n FROM public.kitchen_meal_feedback WHERE entry_id = eid AND user_id = member;
     names := array_append(names, 'member can rate a dinner; an edit keeps the earlier rating'); oks := array_append(oks, (v = 2 AND n = 1)); details := array_append(details, ('version ' || v || ', ' || n || ' earlier'));
+    -- v6: detail scores, own only, kept in history; out-of-range refused.
+    UPDATE public.kitchen_meal_feedback SET scores = '{"flavour": 8, "juiciness": 9}' WHERE entry_id = eid AND user_id = member RETURNING version INTO v;
+    SELECT jsonb_array_length(history) INTO n FROM public.kitchen_meal_feedback WHERE entry_id = eid AND user_id = member;
+    names := array_append(names, 'member can add flavour / juiciness scores (v6); the earlier answer is kept'); oks := array_append(oks, (v = 3 AND n = 2)); details := array_append(details, ('version ' || v || ', ' || n || ' earlier'));
+    BEGIN
+      UPDATE public.kitchen_meal_feedback SET scores = '{"seasoning": 11}' WHERE entry_id = eid AND user_id = member;
+      ok := FALSE; msg := 'a score of 11 was allowed';
+    EXCEPTION WHEN check_violation THEN ok := TRUE; msg := 'refused';
+    END;
+    names := array_append(names, 'detail scores stay between 0 and 10'); oks := array_append(oks, ok); details := array_append(details, msg);
     BEGIN
       INSERT INTO public.kitchen_meal_feedback (entry_id, recipe_id, rating) VALUES (eid, rid, 2);
       ok := FALSE; msg := 'a second rating was allowed';

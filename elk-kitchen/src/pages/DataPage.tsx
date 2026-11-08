@@ -8,6 +8,7 @@ import { downloadBundle } from "../lib/download";
 import { parseImportFile, planImport, type ImportData, type ImportItem, type ImportResult } from "../lib/recipeModel";
 import { readDeviceData } from "../lib/recipeStorage";
 import type { MealFeedback } from "../types/feedback";
+import { deviceRecordPhotoIds, hasDeviceRecords, mergeDeviceRecords, readDeviceRecords, type DeviceRecords } from "../lib/deviceRecords";
 
 export function DataPage() {
   const { store, deviceStore, photos } = useKitchen();
@@ -20,6 +21,8 @@ export function DataPage() {
   const [fromDevice, setFromDevice] = useState(false);
   // Family dinner feedback carried in the file (or on this device).
   const [feedback, setFeedback] = useState<MealFeedback[]>([]);
+  // Sausage Days, tasting cards, recipe versions carried in the file (kept on this phone).
+  const [records, setRecords] = useState<DeviceRecords | undefined>(undefined);
   const [photoNote, setPhotoNote] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +34,7 @@ export function DataPage() {
     setPhotoNote(null);
     setFilePhotos(data.photos);
     setFeedback(data.mealFeedback ?? []);
+    setRecords(device ? undefined : data.deviceRecords);
     setFromDevice(device);
     setResult(null);
     try {
@@ -82,8 +86,14 @@ export function DataPage() {
       } catch (e) {
         feedbackNote = ` Dinner feedback wasn't imported (${e instanceof Error ? e.message : String(e)}); it's still in the file.`;
       }
+      // This phone's own records from the file (add-only; anything already on the phone is left as it is).
+      let recordNote = "";
+      if (hasDeviceRecords(records)) {
+        const m = mergeDeviceRecords(window.localStorage, records!);
+        recordNote = ` Sausage Days ${m.plans}, tasting cards ${m.tastings}, recipe versions ${m.versions} added to this phone (the rest were already here).`;
+      }
       // Photos after records: a record never points at a photo that isn't stored.
-      const ids = new Set([...photoIdsOf(items), ...fb.flatMap((f) => f.photos.map((p) => p.id))]);
+      const ids = new Set([...photoIdsOf(items), ...fb.flatMap((f) => f.photos.map((p) => p.id)), ...deviceRecordPhotoIds(records)]);
       let copied = 0;
       let lost = 0;
       if (fromDevice) {
@@ -98,7 +108,7 @@ export function DataPage() {
         lost = [...ids].filter((id) => !filePhotos.some((p) => p.id === id)).length;
       }
       setPhotoNote(`${copied} photo${copied === 1 ? "" : "s"} added${lost ? `; ${lost} photo${lost === 1 ? " was" : "s were"} not in the file` : ""}.`
-        + (fb.length ? ` ${feedbackAdded} dinner rating${feedbackAdded === 1 ? "" : "s"} added (the rest were already here).` : "") + feedbackNote);
+        + (fb.length ? ` ${feedbackAdded} dinner rating${feedbackAdded === 1 ? "" : "s"} added (the rest were already here).` : "") + feedbackNote + recordNote);
       setResult(res);
       // Re-plan so the list reflects what's there now; a second click adds nothing.
       setItems(planImport(
@@ -124,12 +134,12 @@ export function DataPage() {
       <section className="mt-6 rounded-2xl border border-clay bg-cream p-5">
         <h2 className="font-semibold text-bark">Export</h2>
         <p className="mt-1 text-sm text-bark/70">
-          Downloads one file with {shared ? "all family recipes, cooking history" : "every recipe, batch"} and all their photos.
-          Keep it somewhere safe.
+          Downloads one file with {shared ? "all family recipes, cooking history" : "every recipe, batch"} and all their photos, plus
+          this phone's Sausage Days, tasting cards and recipe versions. Take one on every phone before switching on family sharing, and keep it somewhere safe.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" className={primaryButton} onClick={async () => {
-            try { downloadBundle(await bundleWithPhotos(store, photos)); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+            try { downloadBundle(await bundleWithPhotos(store, photos, readDeviceRecords(window.localStorage))); } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
           }}>
             {shared ? "Export family recipes" : "Export this device's recipes"}
           </button>

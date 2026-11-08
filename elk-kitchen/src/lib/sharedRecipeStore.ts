@@ -5,7 +5,7 @@ import { EXPORT_APP, EXPORT_FORMAT, newId, normalizePhotos, type ExportBundle, t
 import { byNewestCook, keysOf, summarize, type RecipeStore, type UpdateResult } from "./recipeStorage";
 import { normalizeSession } from "./cooking/drafts";
 import type { FeedbackInput, MealFeedback, MemberProfile, MemoryLoad, ProfileInput } from "../types/feedback";
-import { makeAgainOf, ratingOf, revisionsOf } from "./familyMemory";
+import { hasScores, makeAgainOf, ratingOf, revisionsOf, scoresOf } from "./familyMemory";
 
 // Family recipes in the ELK Supabase project (supabase/kitchen.sql). Who may
 // read or write is decided there, by the family list; nothing here is a
@@ -25,10 +25,15 @@ type EntryRow = {
 type FeedbackRow = {
   id: string; entry_id: string; recipe_id: string; user_id: string; author_name: string; source: string;
   rating: number | string | null; comment: string; improvement: string; make_again: string | null;
-  photos: unknown; history: unknown; version: number; created_at: string; updated_at: string;
+  photos: unknown; history: unknown; version: number; created_at: string; updated_at: string; scores?: unknown;
 };
 type ProfileRow = { user_id: string; avoids: string; likes: string; notes: string; updated_at: string };
 const FEEDBACK_COLS = "id,entry_id,recipe_id,user_id,author_name,source,rating,comment,improvement,make_again,photos,history,version,created_at,updated_at";
+// kitchen.sql v6 adds `scores` (flavour / seasoning / texture / juiciness). A database
+// still on v5 doesn't have it: Kitchen then reads and writes without it.
+const SCORES_COL = ",scores";
+const isMissingColumn = (e: { code?: string; message?: string }) =>
+  e.code === "42703" || e.code === "PGRST204" || /column .*scores.* does not exist|could not find the 'scores' column/i.test(e.message ?? "");
 
 const RECIPE_COLS = "id,title,author_name,ingredients,instructions,notes,tags,suggested_tags,approx_calories,legacy,version,created_at,updated_at,removed_at,extra";
 const ENTRY_COLS = "id,recipe_id,cooked_on,cook_name,ingredients_used,substitutions,family_reaction,improve_next_time,notes,rating,extra,created_by,created_at";
@@ -297,15 +302,24 @@ export class SharedRecipeStore implements RecipeStore {
   private toFeedback = (r: FeedbackRow): MealFeedback => ({
     id: r.id, entryId: r.entry_id, recipeId: r.recipe_id,
     authorName: r.author_name || "Someone",
-    rating: ratingOf(r.rating), comment: r.comment, improvement: r.improvement, makeAgain: makeAgainOf(r.make_again),
+    rating: ratingOf(r.rating), scores: scoresOf(r.scores), comment: r.comment, improvement: r.improvement, makeAgain: makeAgainOf(r.make_again),
     photos: normalizePhotos(r.photos, ""),
     source: r.source === "device-import" ? "device-import" : "app",
     version: r.version, history: revisionsOf(r.history), createdAt: r.created_at, updatedAt: r.updated_at,
     mine: r.source === "app" && r.user_id === this.userId,
   });
 
+  // null until known; false when the shared database is still on kitchen.sql v5.
+  private scoresColumn: boolean | null = null;
+  private cols = () => (this.scoresColumn === false ? FEEDBACK_COLS : FEEDBACK_COLS + SCORES_COL);
+
   async listFeedback(): Promise<MemoryLoad<MealFeedback>> {
-    const { data, error } = await this.client.from("kitchen_meal_feedback").select(FEEDBACK_COLS).order("created_at").limit(5000);
+    const read = (cols: string) => this.client.from("kitchen_meal_feedback").select(cols).order("created_at").limit(5000) as unknown as Promise<{ data: unknown; error: { code?: string; message: string } | null }>;
+    let { data, error } = await read(this.cols());
+    if (error && this.scoresColumn !== false && isMissingColumn(error)) {
+      this.scoresColumn = false;
+      ({ data, error } = await read(FEEDBACK_COLS));
+    } else if (!error) this.scoresColumn ??= true;
     if (error) {
       if (isMissingTable(error)) return { status: "not-set-up" };
       fail("load dinner feedback", error);
@@ -314,27 +328,43 @@ export class SharedRecipeStore implements RecipeStore {
   }
 
   async saveFeedback(entryId: string, input: FeedbackInput, base: MealFeedback | null): Promise<MealFeedback> {
-    const fields = {
+    const plain = {
       rating: input.rating, comment: input.comment, improvement: input.improvement,
       make_again: input.makeAgain, photos: input.photos,
     };
+    const wantScores = hasScores(input.scores) || (base != null && hasScores(base.scores));
+    if (wantScores && this.scoresColumn !== false) {
+      try {
+        return await this.writeFeedback(entryId, { ...plain, scores: scoresOf(input.scores) }, base, this.cols());
+      } catch (e) {
+        if (!(e instanceof MissingColumn)) throw e;
+        this.scoresColumn = false;
+      }
+    }
+    const saved = await this.writeFeedback(entryId, plain, base, FEEDBACK_COLS);
+    return wantScores && this.scoresColumn === false ? { ...saved, scoresNotSaved: true } : saved;
+  }
+
+  private async writeFeedback(entryId: string, fields: Record<string, unknown>, base: MealFeedback | null, cols: string): Promise<MealFeedback> {
+    const missing = (error: { code?: string; message?: string }) => { if ("scores" in fields && isMissingColumn(error)) throw new MissingColumn(); };
     if (base) {
       const { data, error } = await this.client.from("kitchen_meal_feedback")
-        .update(fields).eq("id", base.id).eq("version", base.version).select(FEEDBACK_COLS);
-      if (error) fail("save your feedback", error);
-      const rows = data as FeedbackRow[];
+        .update(fields).eq("id", base.id).eq("version", base.version).select(cols);
+      if (error) { missing(error); fail("save your feedback", error); }
+      const rows = data as unknown as FeedbackRow[];
       if (rows.length !== 1) throw new Error("Your feedback changed somewhere else first (another phone?). Reload to see it, then try again.");
       return this.toFeedback(rows[0]);
     }
     // recipe_id (from the dinner), user_id and author_name (from the family
     // list) are set by the database; the placeholder only satisfies NOT NULL.
     const { data, error } = await this.client.from("kitchen_meal_feedback")
-      .insert({ entry_id: entryId, recipe_id: "-", ...fields }).select(FEEDBACK_COLS).single();
+      .insert({ entry_id: entryId, recipe_id: "-", ...fields }).select(cols).single();
     if (error) {
+      missing(error);
       if (error.code === "23505") throw new Error("You've already given feedback on this dinner — change that one instead.");
       fail("save your feedback", error);
     }
-    return this.toFeedback(data as FeedbackRow);
+    return this.toFeedback(data as unknown as FeedbackRow);
   }
 
   // From a phone's backup: kept under the name typed there, read-only, added once.
@@ -345,10 +375,17 @@ export class SharedRecipeStore implements RecipeStore {
       id: f.id, entry_id: f.entryId, recipe_id: f.recipeId, source: "device-import",
       author_name: (f.authorName || "Someone").slice(0, 60),
       rating: f.rating, comment: f.comment, improvement: f.improvement, make_again: f.makeAgain, photos: f.photos,
+      ...(hasScores(f.scores) && this.scoresColumn !== false ? { scores: f.scores } : {}),
     }));
     if (rows.length === 0) return 0;
-    const { data, error } = await this.client.from("kitchen_meal_feedback")
+    let { data, error } = await this.client.from("kitchen_meal_feedback")
       .upsert(rows, { onConflict: "id", ignoreDuplicates: true }).select("id");
+    if (error && isMissingColumn(error)) {
+      // v5 database: bring the ratings and words in; the detail scores stay in the backup file.
+      this.scoresColumn = false;
+      ({ data, error } = await this.client.from("kitchen_meal_feedback")
+        .upsert(rows.map(({ scores: _s, ...r }) => r), { onConflict: "id", ignoreDuplicates: true }).select("id"));
+    }
     if (error) fail("import dinner feedback", error);
     return (data ?? []).length;
   }
@@ -403,3 +440,5 @@ export class SharedRecipeStore implements RecipeStore {
     };
   }
 }
+
+class MissingColumn extends Error {}

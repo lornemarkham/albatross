@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useKitchen } from "../context/KitchenContext";
 import { useLoad } from "../lib/useLoad";
-import type { FeedbackInput, MakeAgain, MealFeedback } from "../types/feedback";
+import { SCORE_FIELDS, blankFeedbackScores, type FeedbackInput, type FeedbackScores, type MakeAgain, type MealFeedback } from "../types/feedback";
+import { hasScores } from "../lib/familyMemory";
 import type { CookingEntry } from "../types/recipe";
 import { PhotoGallery, PhotoPicker } from "./Photos";
 import { inputClass, labelClass, primaryButton, secondaryButton } from "./ui";
@@ -74,6 +75,9 @@ function FeedbackCard({ f, canEdit, onEdit }: { f: MealFeedback; canEdit: boolea
         </p>
         {canEdit && <button type="button" className="text-sm text-sage underline" onClick={onEdit}>Change</button>}
       </div>
+      {hasScores(f.scores) && (
+        <p className="mt-1 text-sm text-bark/80">{SCORE_FIELDS.filter((s) => f.scores[s.key] != null).map((s) => `${s.label} ${f.scores[s.key]}`).join(" · ")}</p>
+      )}
       {f.comment && <p className="mt-1 whitespace-pre-wrap text-bark">{f.comment}</p>}
       {f.improvement && <p className="mt-1 text-sm text-bark/80"><span className="font-semibold text-sage">Next time: </span>{f.improvement}</p>}
       {f.photos.length > 0 && <div className="mt-2"><PhotoGallery photos={f.photos} /></div>}
@@ -94,6 +98,8 @@ function FeedbackForm({ entry, base, shared, defaultName, onDone, onCancel }: {
     if (!shared && !base && !defaultName) setName(window.localStorage.getItem(NAME_KEY) ?? "");
   }, []);
   const [rating, setRating] = useState<number | null>(base?.rating ?? null);
+  const [scores, setScores] = useState<FeedbackScores>(base?.scores ?? blankFeedbackScores());
+  const [detail, setDetail] = useState(hasScores(base?.scores));
   const [comment, setComment] = useState(base?.comment ?? "");
   const [improvement, setImprovement] = useState(base?.improvement ?? "");
   const [again, setAgain] = useState<MakeAgain | null>(base?.makeAgain ?? null);
@@ -105,8 +111,9 @@ function FeedbackForm({ entry, base, shared, defaultName, onDone, onCancel }: {
     setBusy(true);
     setError(null);
     try {
-      const input: FeedbackInput = { authorName: name, rating, comment: comment.trim(), improvement: improvement.trim(), makeAgain: again, photos };
-      await store.saveFeedback(entry.id, input, base);
+      const input: FeedbackInput = { authorName: name, rating, scores, comment: comment.trim(), improvement: improvement.trim(), makeAgain: again, photos };
+      const saved = await store.saveFeedback(entry.id, input, base);
+      if (saved.scoresNotSaved) window.alert("Your rating and words are saved. The flavour / seasoning / texture / juiciness scores couldn't be shared yet: the family database needs kitchen.sql v6.");
       if (!shared) window.localStorage.setItem(NAME_KEY, name.trim());
       onDone();
     } catch (e) {
@@ -134,6 +141,25 @@ function FeedbackForm({ entry, base, shared, defaultName, onDone, onCancel }: {
           ))}
         </div>
       </fieldset>
+      {!detail ? (
+        <button type="button" className="text-sm text-sage underline" onClick={() => setDetail(true)}>Rate flavour, seasoning, texture, juiciness (optional)</button>
+      ) : (
+        <div className="space-y-2 rounded-xl bg-cream/70 p-2">
+          {SCORE_FIELDS.map((s) => (
+            <fieldset key={s.key}>
+              <legend className="text-sm font-semibold text-bark">{s.label} <span className="font-normal text-bark/60">{scores[s.key] ?? "—"}/10</span></legend>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {Array.from({ length: 10 }, (_, n) => n + 1).map((n) => (
+                  <button key={n} type="button" aria-label={`${s.label} ${n}`} aria-pressed={scores[s.key] === n}
+                    onClick={() => setScores((x) => ({ ...x, [s.key]: x[s.key] === n ? null : n }))}
+                    className={`h-9 w-9 rounded-full border text-sm ${scores[s.key] === n ? "border-sage bg-sage text-white" : "border-clay bg-cream text-bark"}`}>{n}</button>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+          <p className="text-xs text-bark/60">Leave any blank. A blank score never counts as zero.</p>
+        </div>
+      )}
       <fieldset>
         <legend className={labelClass}>Make it again?</legend>
         <div className="mt-1 flex flex-wrap gap-2">

@@ -95,6 +95,20 @@ export type PantryAction = {
   undoBatchId: string | null;
 };
 
+export type CookDraft = {
+  origin: "ai" | "kitchen-idea";
+  title: string;
+  // What the person asked, word for word.
+  question: string;
+  // Amounts are the idea's, for the dish — not Pantry quantities.
+  ingredients: { name: string; amount: string; status: "have" | "need" | "optional" | "basic"; evidence: string }[];
+  steps: string[];
+  safety: string[];
+  why: string[];
+  model: string;
+  createdAt: string;
+};
+
 export type CookingSession = {
   format: 1;
   id: string;
@@ -118,6 +132,10 @@ export type CookingSession = {
   savedEntryId: string | null;
   // Sausage day: the approved adaptation this cook follows (the recipe itself is unchanged).
   plan?: BatchPlan | null;
+  // Cooking an idea from Kitchen's chef that isn't a family recipe yet (an AI-generated
+  // recipe, or one of Kitchen's own idea templates). Kept exactly as suggested; it
+  // becomes a recipe only when the cook saves it on the review screen.
+  draft?: CookDraft | null;
   // "Finished grinding the pork", "now grinding the chicken", in order.
   stageLog?: { at: string; stage: string; subject: string; action: "started" | "finished" }[];
 };

@@ -44,7 +44,7 @@ test("an empty or unrelated pantry claims nothing", () => {
 
 test("on-hand follows Inventory: batches are the truth once a product has any", () => {
   const items = [
-    { id: "a", name: "Black beans", quantity: 5, attributes: { unit: "cans" } },
+    { id: "a", name: "Black beans", quantity: 5, attributes: { unit: "cans", opened: "opened" } },
     { id: "b", name: "Oats", quantity: 3, attributes: null },
     { id: "c", name: "Lentils", quantity: 0, attributes: {} },
   ];
@@ -56,10 +56,12 @@ test("on-hand follows Inventory: batches are the truth once a product has any", 
   assert.deepEqual(summarizePantry(items, lots), [
     { name: "Black beans", onHand: 3, unit: "cans", bestBefore: "2026-11-01", location: "Basement",
       // Every open batch, oldest first; the empty Garage batch isn't one.
-      places: [{ location: "Basement", quantity: 1, bestBefore: "2027-01-01" }, { location: "Kitchen", quantity: 2, bestBefore: "2026-11-01" }],
-      lowStockAt: null },
-    { name: "Oats", onHand: 3, unit: "items", bestBefore: null, location: "", places: [], lowStockAt: null },
-    { name: "Lentils", onHand: 0, unit: "items", bestBefore: null, location: "", places: [], lowStockAt: null },
+      places: [{ location: "Basement", quantity: 1, bestBefore: "2027-01-01", receivedOn: "2026-01-01" }, { location: "Kitchen", quantity: 2, bestBefore: "2026-11-01", receivedOn: "2026-05-01" }],
+      lowStockAt: null,
+      // Inventory's own product id, its "Opened?" field, and when the newest open batch came in.
+      itemId: "a", opened: true, lastReceivedOn: "2026-05-01" },
+    { name: "Oats", onHand: 3, unit: "items", bestBefore: null, location: "", places: [], lowStockAt: null, itemId: "b", opened: null, lastReceivedOn: null },
+    { name: "Lentils", onHand: 0, unit: "items", bestBefore: null, location: "", places: [], lowStockAt: null, itemId: "c", opened: null, lastReceivedOn: null },
   ]);
 });
 

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { deviceRecordPhotoIds, hasDeviceRecords, type DeviceRecords } from "./deviceRecords";
 import type { PhotoRef } from "../types/recipe";
 import type { CookingSession } from "../types/cooking";
 import { sessionMediaIds } from "./cooking/summary";
@@ -159,10 +160,11 @@ export async function importPhotos(store: PhotoStore, photos: ExportedPhoto[]): 
 
 // A complete backup: records plus every photo they point to.
 export async function bundleWithPhotos(
-  store: { exportAll(): Promise<ExportBundle> }, photoStore: PhotoStore,
+  store: { exportAll(): Promise<ExportBundle> }, photoStore: PhotoStore, deviceRecords?: DeviceRecords,
 ): Promise<ExportBundle> {
-  const bundle = await store.exportAll();
+  const bundle = { ...(await store.exportAll()), ...(hasDeviceRecords(deviceRecords) ? { deviceRecords } : {}) };
   const ids = [
+    ...deviceRecordPhotoIds(bundle.deviceRecords),
     ...[...bundle.recipes, ...bundle.cookingEntries].flatMap((x) => x.photos.map((p) => p.id)),
     ...bundle.cookingEntries.flatMap((e) => sessionMediaIds(e.session)),
     ...(bundle.mealFeedback ?? []).flatMap((f) => f.photos.map((p) => p.id)),

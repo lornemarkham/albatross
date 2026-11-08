@@ -9,11 +9,12 @@
 // - Every change to an ingredient is kept in its history and as an event.
 import type { Recipe } from "../../types/recipe";
 import type {
+  CookDraft,
   CookingSession, IngredientChange, NoteCategory, PantryAction, Pending, PendingAction, MediaRef, Qty, SessionEvent,
   SessionIngredient, TempUnit, TempWhat, TranscriptLine,
 } from "../../types/cooking";
 import { newId } from "../recipeModel";
-import { requiredInternalC, seasoningLines } from "../meat";
+import { blankDetails, requiredInternalC, seasoningLines } from "../meat";
 import { stepsFromText } from "../../prototype/ideas/cookSteps";
 import type { BatchPlan, Preferences } from "../../types/sausage";
 import { adviceFor, afterWeighing, parseProgress, planAnswer, STAGE_DOING, STAGE_LABEL } from "../sausage/stages";
@@ -26,7 +27,7 @@ import {
 
 export type Result = { session: CookingSession; reply: string; stopListening?: boolean };
 
-export function newSession(args: { recipe: Recipe | null; title?: string; cookName: string; now: string; id?: string; plan?: BatchPlan | null }): CookingSession {
+export function newSession(args: { recipe: Recipe | null; title?: string; cookName: string; now: string; id?: string; plan?: BatchPlan | null; draft?: CookDraft | null }): CookingSession {
   const at = args.now;
   return {
     format: 1,
@@ -47,6 +48,19 @@ export function newSession(args: { recipe: Recipe | null; title?: string; cookNa
     awaitingNote: null,
     savedEntryId: null,
     ...(args.plan ? { plan: args.plan, stageLog: [] } : {}),
+    ...(args.draft && !args.recipe ? { draft: args.draft, recipeTitle: args.draft.title } : {}),
+  };
+}
+
+// While cooking an idea that isn't a recipe yet, the idea stands in for the recipe:
+// steps, "what's next?", "how much cheese?" all read from it. It has no id and is never saved as-is.
+export function draftRecipe(s: CookingSession): Recipe | null {
+  const d = s.draft;
+  if (!d || s.recipeId) return null;
+  return {
+    id: "", title: d.title, authorName: "", ingredients: d.ingredients.map((i) => `${i.amount ? `${i.amount} ` : ""}${i.name}`.trim()).join("\n"),
+    instructions: d.steps.join("\n"), notes: d.safety.join("\n"), tags: [], suggestedTags: [], approxCalories: null, kind: "general", category: "",
+    photos: [], details: blankDetails(), version: 0, createdAt: d.createdAt, updatedAt: d.createdAt,
   };
 }
 

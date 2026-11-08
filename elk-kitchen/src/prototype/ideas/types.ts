@@ -63,9 +63,15 @@ export type PantryItem = {
   bestBefore: string | null;  // earliest open batch, YYYY-MM-DD
   location: string;
   // Every open batch, oldest first (real Pantry only): where it is, how many, best before.
-  places?: { location: string; quantity: number; bestBefore: string | null }[];
+  places?: { location: string; quantity: number; bestBefore: string | null; receivedOn?: string | null }[];
   // Pantry's own "running low" level for this product, when set.
   lowStockAt?: number | null;
+  // Inventory's product id (real Pantry only), for confirmed pantry_* calls.
+  itemId?: string;
+  // Inventory's own "Opened?" field (attributes.opened), when someone set it.
+  opened?: boolean | null;
+  // When the newest open batch came in (purchase date, or when it was recorded).
+  lastReceivedOn?: string | null;
 };
 
 export type Weather = "hot" | "mild" | "cold" | "rainy";
