@@ -40,6 +40,7 @@ export function normalizeDay(raw: unknown): SausageDay | undefined {
     scale: typeof d.scale === "number" ? d.scale : null, done: obj(d.done, {}), tweaks: obj(d.tweaks, {}), optional: obj(d.optional, {}),
     storage: obj(d.storage, {}), photos: arr(d.photos), timers: arr(d.timers), log: arr(d.log), awaiting: d.awaiting ?? null,
     entries: obj(d.entries, {}), lastReply: typeof d.lastReply === "string" ? d.lastReply : "", finishedAt: d.finishedAt ?? null,
+    ...(d.completion && Array.isArray(d.completion.made) ? { completion: d.completion } : {}),
   };
 }
 

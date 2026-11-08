@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { useKitchen } from "../context/KitchenContext";
 import { useLoad } from "../lib/useLoad";
 import { PlanStore } from "../lib/sausage/preferences";
-import { TODAY_SEED, ensureSausageDay } from "../lib/sausage/today";
+import { SEED_PLAN_ID, TODAY_SEED, ensureSausageDay } from "../lib/sausage/today";
 import { dayOf, exactKg, finishedCount, inPlanOrder, liveTimers, meatTotals, nextAction, progressOf, stepStates } from "../lib/sausage/day";
 import { clock } from "../lib/cooking/parse";
+import { TastingStore, dayStage } from "../lib/sausage/tasting";
+import { TastingCards } from "./TastingCards";
 import { PhotoImg } from "./Photos";
 import type { Recipe } from "../types/recipe";
 import type { SausagePlan } from "../types/sausage";
@@ -18,10 +20,11 @@ const inSeedWeek = (d = new Date().toISOString().slice(0, 10)) => d >= TODAY_SEE
 export function SausageDayHome() {
   const { store, myName } = useKitchen();
   const plans = useMemo(() => new PlanStore(window.localStorage), []);
-  const [plan, setPlan] = useState<SausagePlan | null>(() => plans.list().find((p) => p.day && !p.day.finishedAt) ?? null);
+  // A finished day (with its tasting cards) comes first; else the live one.
+  const [plan, setPlan] = useState<SausagePlan | null>(() => plans.list().find((p) => p.day?.completion) ?? plans.list().find((p) => p.day && !p.day.finishedAt) ?? null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (plan || !inSeedWeek()) return;
+    if (plan || !inSeedWeek() || plans.get(SEED_PLAN_ID)) return;
     ensureSausageDay(store, plans, new Date().toISOString(), myName).then((p) => { if (!p.day?.finishedAt) setPlan(p); }, (e) => setError(e instanceof Error ? e.message : String(e)));
   }, [plan, store, plans, myName]);
   // Re-read once the day exists: on first open its recipes were only just added.
@@ -37,6 +40,19 @@ export function SausageDayHome() {
 
   if (error) return <p className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">Sausage Day couldn't be set up: {error}</p>;
   if (!plan) return null;
+  if (plan.day?.completion) {
+    const tastings = new TastingStore(window.localStorage).list();
+    const stage = dayStage(plan, tastings);
+    return (
+      <section className="mb-5 overflow-hidden rounded-3xl bg-tomato p-5 text-white shadow-lg sm:p-6">
+        <p className="text-xs font-bold uppercase tracking-widest text-butter">{plan.title.replace(/^Sausage Day —\s*/, "")}</p>
+        <h2 className="font-display text-3xl font-bold leading-tight">{stage === "rated" ? "Sausage Day — Rated!" : "Sausage Day — Ready to Taste!"}</h2>
+        <p className="mb-4 mt-1 text-sm text-white/85">{plan.day.completion.made.length} sausages made. {stage === "rated" ? "Every one is rated — tap to change a rating." : "Tap one to rate it; you can finish later."}</p>
+        <TastingCards plan={plan} tastings={tastings} onDark />
+        <Link to={`/sausage-day/${plan.id}`} className="mt-3 block text-center text-sm font-semibold text-butter underline">Open Sausage Day</Link>
+      </section>
+    );
+  }
   const recipes = inPlanOrder(plan, (all ?? []) as Recipe[]);
   const ratings: Record<string, number> = {};
   for (const [rid, eid] of Object.entries(dayOf(plan).entries)) ratings[rid] = fb?.status === "ready" ? fb.items.filter((f) => f.entryId === eid && f.rating != null).length : 0;

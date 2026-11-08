@@ -152,4 +152,42 @@ export type SausageDay = {
   entries: Record<string, string>;
   lastReply: string;
   finishedAt: string | null;
+  // Set when the cook says what was actually made (M635). The day's history
+  // (log, photos, timers, notes) stays as it was; this only closes it.
+  completion?: Completion;
+};
+
+// How sure Kitchen is of an ingredient line on a sausage that was made.
+// card = the recipe card as written (not confirmed as what went in);
+// planned = the approved plan's figure for the meat (weighed or estimated);
+// estimate = someone's guess; known = said or typed by the cook; unknown = nothing was recorded.
+export type Certainty = "known" | "planned" | "card" | "estimate" | "unknown";
+
+export type IngredientLine = { id: string; name: string; amount: string; certainty: Certainty; source: string };
+
+export type IngredientCorrection = { at: string; by: string; before: IngredientLine[]; after: IngredientLine[] };
+
+export type MadeSausage = {
+  recipeId: string;
+  title: string;
+  status: "made-awaiting-tasting";
+  madeOn: string;
+  count: number | null;
+  finishedG: number | null;
+  // The reconciled ingredients, editable by the cook. `original` is what Kitchen
+  // reconstructed at completion and is never edited; every change is in `corrections`.
+  ingredients: IngredientLine[];
+  original: IngredientLine[];
+  corrections: IngredientCorrection[];
+  note: string;
+  entryId: string | null;
+};
+
+export type Completion = {
+  completedAt: string;
+  completedBy: string;
+  made: MadeSausage[];
+  // Recipes that were in the plan but not made: they stay in the library untouched.
+  notMade: { recipeId: string; title: string }[];
+  closedSessionIds: string[];
 };

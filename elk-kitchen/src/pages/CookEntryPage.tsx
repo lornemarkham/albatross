@@ -5,6 +5,7 @@ import { useKitchen } from "../context/KitchenContext";
 import { parseOptionalNumber, todayIso } from "../lib/recipeModel";
 import { FoodSafetyPanel, MeatFields } from "../components/MeatFields";
 import { PhotoPicker } from "../components/Photos";
+import { RecipeLearning } from "../components/RecipeLearning";
 import { blankDetails } from "../lib/meat";
 import type { MeatDetails, PhotoRef, Recipe } from "../types/recipe";
 
@@ -94,6 +95,8 @@ export function CookEntryPage() {
       <h1 className="mt-4 text-2xl font-bold text-bark">{recipe && recipe.kind !== "general" ? "Record a batch" : "Record a cook"}</h1>
       <p className="mt-1 text-sm text-bark/70">Saved as its own entry. The recipe stays exactly as written.</p>
       <p className="mt-1 text-bark/70">{recipe ? recipe.title : "Loading…"}</p>
+
+      {recipe && <RecipeLearning recipe={recipe} />}
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
         <div className="grid gap-5 sm:grid-cols-2">

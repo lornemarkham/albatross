@@ -18,6 +18,7 @@ import {
 import { SEED_PREFS, ensureSausageDay } from "../lib/sausage/today";
 import { PhotoImg } from "../components/Photos";
 import { DinnerFeedback } from "../components/DinnerFeedback";
+import { CompletedDay } from "./CompletedDay";
 import type { Recipe } from "../types/recipe";
 import type { DayPhoto, DayStepKey, MeatStatus, Purchase, SausagePlan } from "../types/sausage";
 
@@ -38,6 +39,9 @@ export function SausageDayPage() {
     ensureSausageDay(store, plans, new Date().toISOString(), myName).then((p) => navigate(`/sausage-day/${p.id}`, { replace: true }), (e) => setError(e instanceof Error ? e.message : String(e)));
   }, [id, store, plans, myName, navigate]);
   if (!id) return <div className="p-8 text-center text-bark/70">{error ?? "Getting Sausage Day ready…"}</div>;
+  // A finished day opens as the tasting page, never back on the grinding instructions.
+  const done = plans.get(id);
+  if (done?.day?.completion) return <CompletedDay initial={done} />;
   return <SausageDay id={id} />;
 }
 
@@ -325,6 +329,7 @@ function SausageDay({ id }: { id: string }) {
             ))}
           </ol>
           {!d.finishedAt && !prog.current && <button type="button" onClick={() => save({ ...plan, day: { ...d, finishedAt: new Date().toISOString() } })} className="mt-3 min-h-14 w-full rounded-2xl bg-sage text-lg font-bold text-white">That's Sausage Day done!</button>}
+          {!d.finishedAt && <Link to={`/sausage-day/${plan.id}/finish`} className="mt-3 flex min-h-14 w-full items-center justify-center rounded-2xl border-2 border-sage text-lg font-bold text-sage">Sausage Day is over — record what I made</Link>}
           {!d.finishedAt && prog.current && <button type="button" onClick={() => { if (confirm("Take Sausage Day off the home page? Everything stays here and in the recipes.")) save({ ...plan, day: { ...d, finishedAt: new Date().toISOString() } }); }} className="mt-3 text-sm text-bark/60 underline">Take it off the home page</button>}
           <p className="mt-2 text-xs text-bark/50">Kept on this phone with the day. Each batch you save keeps its own record in the recipe's journal, which goes in Kitchen's backups.</p>
         </section>

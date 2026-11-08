@@ -1,6 +1,17 @@
 # Releasing ELK Kitchen
 
-**Status (2026-11-07, M632):** Sausage Day live (`/sausage-day`, plus the home-page card) is committed on
+**Status (2026-11-08, M635):** Finish Sausage Day is committed on `kitchen-shopping-list` on top of `d487b76`
+(M634 shipped that one). Not pushed, not deployed: `~/forge/data/release-policy.json` still has no `kitchen` entry.
+This-device mode, so no SQL is needed. Tests: 180. What it adds: `/sausage-day/:id/finish` (say which sausages were
+made), the completed Sausage Day page, home cards "Sausage Day — Ready to Taste!", tasting cards `/taste/:planId/:recipeId`,
+"What we learned" on a recipe, and "Make an improved version" (a new recipe, never an overwrite). Check on the phone after
+deploying: home shows the live card with "record what I made" inside Sausage Day, tick Potato / Breakfast / Bratwurst, close,
+rate one sausage with only the overall score, reload, rate again. **Shared mode:** overall ratings reach the family through
+the existing dinner feedback; the seasoning / texture / juiciness scores need extra columns (or a table) in
+`kitchen.sql` before they can be shared. Sausage Day, tasting cards and recipe versions are not in Backup & import yet:
+use "Save a copy of this Sausage Day (file)" on the completed page.
+
+**Earlier status (2026-11-07, M632):** Sausage Day live (`/sausage-day`, plus the home-page card) is committed on
 `kitchen-shopping-list` on top of M631 and M629. None of the three is pushed or deployed. It works in this-device
 mode, so no SQL is needed. Tests: 171. Check on a phone after deploying: the home page shows **SAUSAGE DAY — IN
 PROGRESS** (only during 7–21 November 2026). Say or type "Chicken is done", then "2.1 kilograms", then "yes", and

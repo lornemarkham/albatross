@@ -8,6 +8,7 @@ import { PhotoGallery } from "../components/Photos";
 import { DetailsSummary, FoodSafetyPanel, SafetyNotes } from "../components/MeatFields";
 import { safetyChecks } from "../lib/meat";
 import { useLoad } from "../lib/useLoad";
+import { RecipeLearning } from "../components/RecipeLearning";
 import { StartCookingButton } from "./StartCookingPage";
 import type { CookingEntry, RecipeKind } from "../types/recipe";
 
@@ -93,6 +94,8 @@ export function RecipeDetailPage() {
             <p className="mt-1 whitespace-pre-wrap text-bark">{lastAdvice.improveNextTime}</p>
           </div>
         )}
+
+        <RecipeLearning recipe={recipe} />
 
         {!removed && <div className="mt-5"><StartCookingButton recipe={recipe} /></div>}
         {recipe.photos.length > 0 && <div className="mt-5"><PhotoGallery photos={recipe.photos} /></div>}
