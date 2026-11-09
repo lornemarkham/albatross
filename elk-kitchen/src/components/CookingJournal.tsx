@@ -47,7 +47,7 @@ export function eventLine(e: SessionEvent): { icon: string; title: string; body?
     case "media": return { icon: ICON[e.media.type], title: e.media.finished ? `Finished ${{ photo: "photo", video: "clip", voice: "voice note" }[e.media.type]}` : { photo: "Photo", video: "Clip", voice: "Voice note" }[e.media.type], body: e.media.caption || undefined };
     case "pantry": {
       const a = e.action;
-      return { icon: ICON.pantry, title: a.kind === "used" ? `Used from Pantry: ${a.quantity} ${a.unit} ${a.itemName}` : `Put in Pantry: ${a.quantity} ${a.unit} ${a.itemName}`, body: `${a.lotLabel}${a.undone ? " · undone" : ""}` };
+      return { icon: ICON.pantry, title: a.kind === "used" ? `Used from Pantry: ${a.quantity} ${a.unit} ${a.itemName}` : a.kind === "moved" ? `Moved in Pantry: ${a.quantity} ${a.unit} ${a.itemName}` : `Put in Pantry: ${a.quantity} ${a.unit} ${a.itemName}`, body: `${a.lotLabel}${a.undone ? " · undone" : ""}` };
     }
   }
 }

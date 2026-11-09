@@ -11,6 +11,7 @@
 // are all the person sees.
 
 import { AI_RESPONSE_SCHEMA, AI_SYSTEM_PROMPT, checkAiReply, parseAiRequest } from "../src/lib/companion/ai";
+import { FOOD_PHOTO_MAX_CHARS, FOOD_PHOTO_SCHEMA, FOOD_PHOTO_SYSTEM_PROMPT, checkFoodPhotoReply, parseFoodPhotoRequest } from "../src/lib/food/vision";
 import { CHEF_RESPONSE_SCHEMA, CHEF_SYSTEM_PROMPT, checkChefReply, parseChefRequest } from "../src/lib/chef/ai";
 
 export const config = { runtime: "edge" };
@@ -55,11 +56,15 @@ export async function handle(request: Request, env: Env): Promise<Response> {
   if (!env.openaiKey) return json({ error: "Kitchen's AI isn't switched on yet." }, 503);
 
   const text = await request.text();
-  if (text.length > MAX_BODY_CHARS) return json({ error: "That request is too big." }, 413);
+  // A food photo (a small JPEG) is the one request that is allowed to be large.
+  if (text.length > FOOD_PHOTO_MAX_CHARS + 2_000) return json({ error: "That request is too big." }, 413);
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { return json({ error: "Invalid request body" }, 400); }
+  const isPhoto = (parsed as { mode?: unknown } | null)?.mode === "food-photo";
+  if (text.length > MAX_BODY_CHARS && !isPhoto) return json({ error: "That request is too big." }, 413);
   const MODEL = env.model?.trim() || DEFAULT_MODEL;
   if ((parsed as { mode?: unknown } | null)?.mode === "chef") return chef(parsed, env, MODEL);
+  if (isPhoto) return foodPhoto(parsed, env, MODEL);
   const req = parseAiRequest(parsed);
   if (!req) return json({ error: "Invalid request body" }, 400);
 
@@ -118,6 +123,40 @@ async function chef(parsed: unknown, env: Env, model: string): Promise<Response>
   } catch (err) {
     console.error("[api/companion chef] failed:", err instanceof Error ? err.name : "error");
     return json({ error: "Kitchen's AI couldn't answer just now." }, 502);
+  }
+}
+
+// ADR 0003 (PROPOSED): name food in a photo. A suggestion only; checkFoodPhotoReply bounds what comes back.
+async function foodPhoto(parsed: unknown, env: Env, model: string): Promise<Response> {
+  const req = parseFoodPhotoRequest(parsed);
+  if (!req) return json({ error: "That photo couldn't be read. Try another, or describe the food." }, 400);
+  try {
+    const res = await (env.fetchImpl ?? fetch)("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.openaiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        max_tokens: 400,
+        messages: [
+          { role: "system", content: FOOD_PHOTO_SYSTEM_PROMPT },
+          { role: "user", content: [{ type: "text", text: req.hint ? `The person typed: ${JSON.stringify(req.hint)}` : "What food is this?" }, { type: "image_url", image_url: { url: req.image, detail: "low" } }] },
+        ],
+        response_format: { type: "json_schema", json_schema: { name: "kitchen_food_photo", strict: true, schema: FOOD_PHOTO_SCHEMA } },
+      }),
+      signal: AbortSignal.timeout(CHEF_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      console.error(`[api/companion food-photo] model returned ${res.status}`);
+      return json({ error: "Couldn't look at the photo just now. Describe the food instead." }, 502);
+    }
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const content = body.choices?.[0]?.message?.content;
+    if (!content) return json({ error: "Couldn't look at the photo just now. Describe the food instead." }, 502);
+    return json({ reply: checkFoodPhotoReply(JSON.parse(content)), model }, 200);
+  } catch (err) {
+    console.error("[api/companion food-photo] failed:", err instanceof Error ? err.name : "error");
+    return json({ error: "Couldn't look at the photo just now. Describe the food instead." }, 502);
   }
 }
 

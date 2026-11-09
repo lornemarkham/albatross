@@ -41,8 +41,8 @@ test("a phone's full backup carries Sausage Day, tasting cards and versions with
   // A new phone: restore, then restore again.
   const data = parseImportFile(JSON.stringify(bundle), T0);
   const other = new Mem();
-  assert.deepEqual(mergeDeviceRecords(other, data.deviceRecords!), { plans: 1, tastings: 1, versions: 1 });
-  assert.deepEqual(mergeDeviceRecords(other, data.deviceRecords!), { plans: 0, tastings: 0, versions: 0 });
+  assert.deepEqual(mergeDeviceRecords(other, data.deviceRecords!), { plans: 1, tastings: 1, versions: 1, food: 0 });
+  assert.deepEqual(mergeDeviceRecords(other, data.deviceRecords!), { plans: 0, tastings: 0, versions: 0, food: 0 });
   assert.equal(new PlanStore(other).list()[0].id, plan.id);
   // The phone's own (newer) card is never overwritten by an older backup.
   const t = new TastingStore(other).list()[0];

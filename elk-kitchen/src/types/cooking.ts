@@ -81,7 +81,7 @@ export type PendingAction =
 // keeps the stock, lots and movements.
 export type PantryAction = {
   requestId: string; // also Inventory's movement batch id (pass to pantry_undo)
-  kind: "used" | "received";
+  kind: "used" | "received" | "moved";
   itemId: string;
   itemName: string;
   lotId: string | null;

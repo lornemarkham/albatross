@@ -129,3 +129,7 @@ FAIL.
     come along under the typed names). Importing twice adds nothing.
 11. Rollback if needed: `vercel rollback` / `vercel promote <previous url>`. The SQL is additive. Removing the
     Vercel env vars and redeploying returns Kitchen to this-device mode. Shared data stays in Supabase, untouched.
+
+## M640 — Add Food (release candidate with M639, M649)
+
+Built on `kitchen-shopping-list`, committed in M649. To release: owner approval, then push and `vercel --prod`. No SQL. Photo suggestions stay off until `OPENAI_API_KEY` and ADR 0003 are accepted. Moving food between places needs Inventory's `pantry_move` (the `pantry-family-kitchen` branch); without it Kitchen says so and changes nothing. Verify on a phone: add food by photo and by voice, say "I used the last of …", undo, and cook a soup from the bones.

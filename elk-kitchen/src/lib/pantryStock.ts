@@ -141,6 +141,27 @@ export async function receiveFinished(
   };
 }
 
+// Move some of one batch to another place (Inventory's pantry_move; the product's total doesn't change).
+// Only in the newer ELK Pantry: without it Kitchen says so and changes nothing.
+export async function moveStock(
+  client: SupabaseClient,
+  args: { item: StockItem; lot: StockLot; quantity: number; toLocation: string; requestId?: string; now?: string },
+): Promise<StockResult> {
+  if (!Number.isInteger(args.quantity) || args.quantity < 1) return { ok: false, error: "Pantry counts whole packages: move 1 or more." };
+  if (!args.toLocation.trim()) return { ok: false, error: "Where should it go?" };
+  const requestId = args.requestId ?? newId();
+  const { data, error } = await client.rpc("pantry_move", { p_lot_id: args.lot.id, p_quantity: args.quantity, p_to_location: args.toLocation.trim(), p_request_id: requestId });
+  if (error) return { ok: false, error: error.code === "PGRST202" || /pantry_move.*does not exist|could not find the function/i.test(error.message) ? "Moving food between places isn't switched on in ELK Pantry yet." : message(error) };
+  return {
+    ok: true,
+    action: {
+      requestId: (data as string) ?? requestId, kind: "moved", itemId: args.item.id, itemName: args.item.name, lotId: args.lot.id,
+      lotLabel: `${args.lot.location || "No place set"} → ${args.toLocation.trim()}`, quantity: args.quantity, unit: args.item.unit,
+      at: args.now ?? new Date().toISOString(), bestBefore: args.lot.bestBefore, location: args.toLocation.trim(), undone: false, undoBatchId: null,
+    },
+  };
+}
+
 export async function undoStock(client: SupabaseClient, action: PantryAction): Promise<{ ok: true; undoBatchId: string } | { ok: false; error: string }> {
   const { data, error } = await client.rpc("pantry_undo", { p_batch_id: action.requestId });
   if (error) return { ok: false, error: message(error) };

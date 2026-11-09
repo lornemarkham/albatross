@@ -3,7 +3,9 @@ import { useKitchen } from "../context/KitchenContext";
 import { supabase } from "../lib/supabase";
 import { useLoad } from "../lib/useLoad";
 import { newId } from "../lib/recipeModel";
-import { candidates, loadStock, lotLabel, receiveFinished, undoStock, useStock, type StockItem } from "../lib/pantryStock";
+import { candidates, loadStock, lotLabel, receiveFinished, type StockItem } from "../lib/pantryStock";
+import { returnUnused, undoFood, useFood, type UseFor } from "../lib/food/consume";
+import { FoodStore } from "../lib/food/notes";
 import { recordPantry } from "../lib/cooking/session";
 import { qtyText } from "../lib/cooking/parse";
 import { dateOf } from "../lib/cooking/summary";
@@ -26,6 +28,9 @@ export function PantryUse({ session, update, defaultName }: { session: CookingSe
   const client = supabase;
   const { data: stock, error, reload } = useLoad(async () => (member && client ? loadStock(client) : null), [member, client]);
   const receipts = pantryReceipts(session);
+  const foodStore = useMemo(() => new FoodStore(window.localStorage), []);
+  // What came out of Pantry is remembered against this cook, so it shows in the food's history after it's all gone.
+  const why: UseFor = { label: session.recipeTitle || "cooking", sessionId: session.id };
 
   if (!member || !client) {
     return (
@@ -48,15 +53,15 @@ export function PantryUse({ session, update, defaultName }: { session: CookingSe
         Pantry counts packages, not grams. Choose what came out of which batch; Kitchen asks before changing anything, and ELK Inventory keeps the stock history.
       </p>
       {session.ingredients.filter((i) => !i.removed).map((i) => (
-        <UseRow key={i.id} label={`${i.name} · ${qtyText(i.qty)} said`} items={items} suggested={candidates(i.name, items)} onDone={record} client={client} />
+        <UseRow key={i.id} label={`${i.name} · ${qtyText(i.qty)} said`} items={items} suggested={candidates(i.name, items)} onDone={record} client={client} store={foodStore} why={why} />
       ))}
       {/* Cooking a chef idea: what it planned to use from Pantry, offered one by one (nothing is taken until confirmed). */}
       {(session.draft?.ingredients ?? [])
         .filter((d) => d.status === "have" && d.evidence.startsWith("Pantry") && !session.ingredients.some((i) => !i.removed && i.name.toLowerCase() === d.name.toLowerCase()))
         .map((d) => (
-          <UseRow key={`draft-${d.name}`} label={`${d.name} · planned in the idea${d.amount ? ` (${d.amount})` : ""}`} items={items} suggested={candidates(d.name, items)} onDone={record} client={client} />
+          <UseRow key={`draft-${d.name}`} label={`${d.name} · planned in the idea${d.amount ? ` (${d.amount})` : ""}`} items={items} suggested={candidates(d.name, items)} onDone={record} client={client} store={foodStore} why={why} />
         ))}
-      <UseRow label="Something else from Pantry" items={items} suggested={[]} onDone={record} client={client} />
+      <UseRow label="Something else from Pantry" items={items} suggested={[]} onDone={record} client={client} store={foodStore} why={why} />
 
       <Finished items={items} defaultName={defaultName} madeOn={dateOf(session.startedAt)} onDone={record} client={client} />
 
@@ -64,7 +69,7 @@ export function PantryUse({ session, update, defaultName }: { session: CookingSe
         <div>
           <p className={sectionLabel}>Pantry changes from this cook</p>
           <ul className="mt-2 space-y-2">
-            {receipts.map((a) => <Receipt key={a.requestId} a={a} items={items} client={client} onUndone={(u) => record(u)} />)}
+            {receipts.map((a) => <Receipt key={a.requestId} a={a} items={items} client={client} store={foodStore} why={why} onUndone={(u) => record(u)} />)}
           </ul>
         </div>
       )}
@@ -74,7 +79,7 @@ export function PantryUse({ session, update, defaultName }: { session: CookingSe
 
 type Client = NonNullable<typeof supabase>;
 
-function UseRow({ label, items, suggested, onDone, client }: { label: string; items: StockItem[]; suggested: StockItem[]; onDone: (a: PantryAction) => void; client: Client }) {
+function UseRow({ label, items, suggested, onDone, client, store, why }: { label: string; items: StockItem[]; suggested: StockItem[]; onDone: (a: PantryAction) => void; client: Client; store: FoodStore; why: UseFor }) {
   const [itemId, setItemId] = useState(suggested[0]?.id ?? "");
   const [lotId, setLotId] = useState("");
   const [count, setCount] = useState("1");
@@ -86,13 +91,13 @@ function UseRow({ label, items, suggested, onDone, client }: { label: string; it
   const lot = item?.lots.find((l) => l.id === lotId) ?? null;
   const others = useMemo(() => items.filter((x) => !suggested.includes(x)).sort((a, b) => a.name.localeCompare(b.name)), [items, suggested]);
 
-  async function use() {
+  async function use(all = false) {
     if (!item) return;
-    const n = Number(count);
+    const n = all ? (lot ? lot.remaining : item.onHand) : Number(count);
     if (!Number.isInteger(n) || n < 1) { setMsg("Use a whole number of packages, 1 or more."); return; }
     if (!window.confirm(`Take ${n} ${item.unit} of ${item.name} out of ELK Pantry?\n\nFrom: ${lotLabel(lot)}\nPantry has ${item.onHand} now; it will have ${item.onHand - n}.`)) return;
     setBusy(true); setMsg(null);
-    const r = await useStock(client, { item, lot, quantity: n, requestId });
+    const r = await useFood(client, store, { item, lot, quantity: n, requestId, why });
     setBusy(false);
     if (!r.ok) { setMsg(r.error); return; }
     setRequestId(newId());
@@ -116,7 +121,12 @@ function UseRow({ label, items, suggested, onDone, client }: { label: string; it
         </select>
         <input aria-label="How many" type="number" inputMode="numeric" min={1} step={1} value={count} onChange={(e) => setCount(e.target.value)} disabled={!item} className={`${inputClass} mt-0`} />
       </div>
-      {item && <button type="button" disabled={busy} onClick={use} className={`${secondaryButton} mt-2 w-full`}>{busy ? "Updating Pantry…" : `Use ${count || "?"} ${item.unit} from Pantry`}</button>}
+      {item && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button type="button" disabled={busy} onClick={() => use()} className={secondaryButton}>{busy ? "Updating Pantry…" : `Use ${count || "?"} ${item.unit}`}</button>
+          <button type="button" disabled={busy || (lot ? lot.remaining : item.onHand) < 1} onClick={() => use(true)} className={secondaryButton}>Use all ({lot ? lot.remaining : item.onHand})</button>
+        </div>
+      )}
       {msg && <p role="status" className="mt-2 text-sm text-bark">{msg}</p>}
     </div>
   );
@@ -170,23 +180,43 @@ function Finished({ items, defaultName, madeOn, onDone, client }: { items: Stock
   );
 }
 
-function Receipt({ a, items, client, onUndone }: { a: PantryAction; items: StockItem[]; client: Client; onUndone: (a: PantryAction) => void }) {
+function Receipt({ a, items, client, store, why, onUndone }: { a: PantryAction; items: StockItem[]; client: Client; store: FoodStore; why: UseFor; onUndone: (a: PantryAction) => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const now = items.find((x) => x.id === a.itemId);
+  const verb = a.kind === "used" ? "Used" : a.kind === "moved" ? "Moved" : "Added";
   async function undo() {
-    if (!window.confirm(`Undo: ${a.kind === "used" ? "put back" : "take out"} ${a.quantity} ${a.unit} of ${a.itemName}?`)) return;
+    if (!window.confirm(`Undo: ${a.kind === "received" ? "take out" : a.kind === "moved" ? "move back" : "put back"} ${a.quantity} ${a.unit} of ${a.itemName}?`)) return;
     setBusy(true);
-    const r = await undoStock(client, a);
+    const r = await undoFood(client, store, a);
     setBusy(false);
     if (!r.ok) { setMsg(r.error); return; }
     onUndone({ ...a, undone: true, undoBatchId: r.undoBatchId, at: new Date().toISOString() });
   }
+  // "We didn't use all of it": put the rest back, keep what was used.
+  async function giveBack() {
+    const ask = window.prompt(`How many of the ${a.quantity} ${a.unit} of ${a.itemName} did you NOT use? They go back into Pantry.`, "1");
+    if (ask === null) return;
+    const n = Number(ask);
+    if (!Number.isInteger(n) || n < 1 || n > a.quantity) { setMsg(`Enter a whole number from 1 to ${a.quantity}.`); return; }
+    if (!window.confirm(`Put ${n} ${a.unit} of ${a.itemName} back${n < a.quantity ? ` and keep ${a.quantity - n} as used` : ""}?`)) return;
+    setBusy(true);
+    const r = await returnUnused(client, store, { action: a, returning: n, why });
+    setBusy(false);
+    if (!r.ok) { setMsg(r.error); return; }
+    onUndone({ ...a, undone: true, undoBatchId: r.undoBatchId, at: new Date().toISOString() });
+    if (r.remaining) onUndone(r.remaining);
+  }
   return (
     <li className={`rounded-xl border border-clay bg-white/70 p-3 text-sm ${a.undone ? "opacity-60" : ""}`}>
-      <p className="font-medium text-bark">{a.kind === "used" ? "Used" : "Added"} {a.quantity} {a.unit} · {a.itemName}{a.undone && " — undone"}</p>
+      <p className="font-medium text-bark">{verb} {a.quantity} {a.unit} · {a.itemName}{a.undone && " — undone"}</p>
       <p className="text-xs text-bark/60">{a.lotLabel}{now ? ` · Pantry has ${now.onHand} ${now.unit} now` : ""}</p>
-      {!a.undone && <button type="button" disabled={busy} onClick={undo} className="mt-1 text-xs text-bark/60 underline">Undo</button>}
+      {!a.undone && (
+        <div className="mt-1 flex gap-4">
+          <button type="button" disabled={busy} onClick={undo} className="text-xs text-bark/60 underline">Undo</button>
+          {a.kind === "used" && <button type="button" disabled={busy} onClick={giveBack} className="text-xs text-bark/60 underline">Return some unused</button>}
+        </div>
+      )}
       {msg && <p className="mt-1 text-xs text-red-700">{msg}</p>}
     </li>
   );

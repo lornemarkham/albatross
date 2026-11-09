@@ -151,7 +151,8 @@ function replyFor(understood: ChefAnswer["understood"], ideas: Idea[], family: S
   const extra = [...new Set(ideas.flatMap((i) => i.ingredients.filter((x) => x.status === "have" && x.source === "inventory").map((x) => lc(x.name))))].filter((n) => !inv.includes(n));
   if (extra.length) parts.push(`Inventory also has ${list(extra.slice(0, 4))}, so I've used ${extra.length === 1 ? "it" : "them"}.`);
   if (!k.pantryConnected) parts.push("Inventory isn't connected here, so I only know what you've told me and what Kitchen recorded.");
-  const what = snack || occasion ? `${occasion ? `${occasion} ` : ""}snack ideas` : "ideas";
+  const total = ideas.length + family.length;
+  const what = snack || occasion ? `${occasion ? `${occasion} ` : ""}snack ${total === 1 ? "idea" : "ideas"}` : total === 1 ? "idea" : "ideas";
   if (ideas.length + family.length === 0) parts.push("Nothing I know fits well yet. Tell me a few more things you have, or pick some from the lists.");
   else parts.push(`Here ${ideas.length + family.length === 1 ? "is one" : `are ${ideas.length + family.length}`} ${what}${family.length ? `, including ${family.length === 1 ? "one" : family.length} from the family's recipes` : ""}.`);
   const needs = [...new Set(ideas.flatMap((i) => i.missing))];

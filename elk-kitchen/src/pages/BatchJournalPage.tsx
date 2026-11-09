@@ -68,7 +68,7 @@ export function BatchJournalPage() {
       {receipts.length > 0 && (
         <Section title="ELK Pantry">
           <ul className="space-y-1 text-sm">
-            {receipts.map((a) => <li key={a.requestId} className={a.undone ? "text-bark/50 line-through" : "text-bark"}>{a.kind === "used" ? "Used" : "Added"} {a.quantity} {a.unit} · {a.itemName} <span className="text-bark/60">({a.lotLabel})</span></li>)}
+            {receipts.map((a) => <li key={a.requestId} className={a.undone ? "text-bark/50 line-through" : "text-bark"}>{a.kind === "used" ? "Used" : a.kind === "moved" ? "Moved" : "Added"} {a.quantity} {a.unit} · {a.itemName} <span className="text-bark/60">({a.lotLabel})</span></li>)}
           </ul>
           <p className="mt-2 text-xs text-bark/60">Stock and its history live in ELK Inventory. Change them there from now on.</p>
         </Section>

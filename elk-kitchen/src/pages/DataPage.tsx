@@ -90,7 +90,7 @@ export function DataPage() {
       let recordNote = "";
       if (hasDeviceRecords(records)) {
         const m = mergeDeviceRecords(window.localStorage, records!);
-        recordNote = ` Sausage Days ${m.plans}, tasting cards ${m.tastings}, recipe versions ${m.versions} added to this phone (the rest were already here).`;
+        recordNote = ` Sausage Days ${m.plans}, tasting cards ${m.tastings}, recipe versions ${m.versions}, food notes ${m.food} added to this phone (the rest were already here).`;
       }
       // Photos after records: a record never points at a photo that isn't stored.
       const ids = new Set([...photoIdsOf(items), ...fb.flatMap((f) => f.photos.map((p) => p.id)), ...deviceRecordPhotoIds(records)]);

@@ -12,10 +12,11 @@ import { PLANS_KEY, normalizePlan } from "./sausage/preferences";
 import { TASTINGS_KEY, TastingStore, type Tasting } from "./sausage/tasting";
 import { VERSIONS_KEY, VersionStore, type VersionLink } from "./sausage/versions";
 import { dayOf } from "./sausage/day";
+import { FoodStore, normalizeNote, type FoodNote } from "./food/notes";
 
 type KV = Pick<Storage, "getItem" | "setItem">;
 
-export type DeviceRecords = { sausagePlans: SausagePlan[]; tastings: Tasting[]; recipeVersions: VersionLink[] };
+export type DeviceRecords = { sausagePlans: SausagePlan[]; tastings: Tasting[]; recipeVersions: VersionLink[]; foodNotes?: FoodNote[] };
 
 function rawList(storage: KV, key: string): unknown[] {
   try { const v = JSON.parse(storage.getItem(key) ?? "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
@@ -26,14 +27,15 @@ export function readDeviceRecords(storage: KV): DeviceRecords {
     sausagePlans: rawList(storage, PLANS_KEY).map(normalizePlan).filter((p): p is SausagePlan => !!p),
     tastings: new TastingStore(storage).list(),
     recipeVersions: new VersionStore(storage).list(),
+    foodNotes: new FoodStore(storage).list(),
   };
 }
 
-export const hasDeviceRecords = (r: DeviceRecords | undefined) => !!r && (r.sausagePlans.length + r.tastings.length + r.recipeVersions.length) > 0;
+export const hasDeviceRecords = (r: DeviceRecords | undefined) => !!r && (r.sausagePlans.length + r.tastings.length + r.recipeVersions.length + (r.foodNotes?.length ?? 0)) > 0;
 
 // Photos those records point to (Sausage Day photos, tasting-card photos).
 export const deviceRecordPhotoIds = (r: DeviceRecords | undefined): string[] =>
-  r ? [...r.sausagePlans.flatMap((p) => dayOf(p).photos.map((x) => x.id)), ...r.tastings.flatMap((t) => t.photos.map((x) => x.id))] : [];
+  r ? [...r.sausagePlans.flatMap((p) => dayOf(p).photos.map((x) => x.id)), ...r.tastings.flatMap((t) => t.photos.map((x) => x.id)), ...(r.foodNotes ?? []).flatMap((n) => n.photos.map((x) => x.id))] : [];
 
 // From a backup file: anything unreadable is dropped, never guessed.
 export function parseDeviceRecords(v: unknown): DeviceRecords | undefined {
@@ -46,10 +48,11 @@ export function parseDeviceRecords(v: unknown): DeviceRecords | undefined {
     sausagePlans: arr(o.sausagePlans).map(normalizePlan).filter((p): p is SausagePlan => !!p),
     tastings: new TastingStore(kv).list(),
     recipeVersions: new VersionStore(kv).list(),
+    foodNotes: arr(o.foodNotes).map(normalizeNote).filter((n): n is FoodNote => !!n),
   };
 }
 
-export type DeviceMerge = { plans: number; tastings: number; versions: number };
+export type DeviceMerge = { plans: number; tastings: number; versions: number; food: number };
 
 export function mergeDeviceRecords(storage: KV, incoming: DeviceRecords): DeviceMerge {
   const have = readDeviceRecords(storage);
@@ -62,5 +65,7 @@ export function mergeDeviceRecords(storage: KV, incoming: DeviceRecords): Device
   const vIds = new Set(have.recipeVersions.map((v) => v.recipeId));
   const newV = incoming.recipeVersions.filter((v) => !vIds.has(v.recipeId));
   if (newV.length) storage.setItem(VERSIONS_KEY, JSON.stringify([...rawList(storage, VERSIONS_KEY), ...newV]));
-  return { plans: newPlans.length, tastings: newT.length, versions: newV.length };
+  const foodStore = new FoodStore(storage);
+  const food = (incoming.foodNotes ?? []).filter((n) => foodStore.add(n)).length;
+  return { plans: newPlans.length, tastings: newT.length, versions: newV.length, food };
 }

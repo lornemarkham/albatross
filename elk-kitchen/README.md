@@ -195,6 +195,18 @@ Pantry's shared shopping list (`pantry_shopping_add`, from Inventory's
 (Pantry tracks it and shows none left) or **unknown** (Pantry has no record —
 never treated as missing). Pantry counts packages, not amounts.
 
+## Add food (`/food`, and the green button at the top of the home page) — M640
+
+Photograph it, say it, confirm it. Food goes into ELK Inventory; Kitchen keeps a note beside it.
+
+- **Capture:** take or upload a photo, describe it by voice or text ("two frozen pork shoulder bones with meat attached"), pick a place, check the draft, save. Amounts are optional: "two bones", "half a bag", "one batch", "about two pounds" are kept in the person's words; Inventory holds a whole number plus a unit, and "amount not known" is stored as 1 portion and says so.
+- **Photo suggestions** are optional, switched off until the AI key exists (ADR 0003), always labelled "not confirmed", and never become the record without a tap.
+- **Real household food:** homemade, leftover, opened, prepared and garden food are kinds on the note. Photos, notes, dates and places are kept.
+- **Tell Kitchen:** "Add these two pork bones to my freezer", "I made three containers of chicken stock", "What's in my freezer?", "Show me what needs using", "I used the last of the stew meat", "Move one container of stock to the fridge". Reading questions answer at once; anything that changes stock is shown as a plan and needs a tap. A name that matches several products, or a missing count, becomes a question. Moving needs the newer Pantry (`pantry_move`) and says so without it.
+- **Duplicates:** the same photo (SHA-256 of the bytes), or the same food in the same place within 30 minutes, asks before adding. A retried save with the same request id adds nothing twice. A near name ("Beef stew meat" vs "Stew meat") is offered, never merged.
+- **Cooking:** the chef reasons over every place Inventory lists (soups from bones, stock and split peas, with what's missing offered for the shopping list). After a cook, the review screen offers *Use N*, *Use all*, *Return some unused*, *Undo*. Used-up food stays in "Used before" (history), never in stock.
+- **Boundary:** Inventory owns food, counts, places and movements, through `pantry_receive` / `pantry_use` / `pantry_move` / `pantry_undo` only. Kitchen's notes (`src/lib/food/notes.ts`) hold photos, words, confidence and use history on this device and travel in Backup & import. Nothing in Inventory's database or repository was changed.
+
 ## Where recipes are saved
 
 | Situation | Saved in |

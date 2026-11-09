@@ -40,6 +40,11 @@ export type Template = {
 
 const SAUSAGE = ["sausage", "bratwurst", "brat", "kielbasa", "chorizo", "smokie", "hot dog", "frank", "wiener"];
 const MEAT = [...SAUSAGE, "chicken", "pulled pork", "ground beef", "beef", "pork", "ham", "bacon", "turkey", "steak", "jerky"];
+// Stock, broth and bones are made from meat but aren't the meat in a dish: "chicken stock" is not "chicken".
+const NOT_MEAT = ["bone", "stock", "broth", "bouillon", "soup"];
+const BONES = ["pork bone", "ham bone", "ham hock", "pork hock", "soup bone", "smoked pork bone"];
+const STEW_MEAT = ["stew meat", "stewing beef", "stew beef", "beef chuck", "chuck roast"];
+const ROOT_VEG = ["carrot", "potato", "parsnip", "turnip", "celery", "cabbage", "rutabaga"];
 const CHEESE = ["cheese", "cheddar", "mozzarella", "monterey jack", "jack", "queso", "pepper jack", "colby", "swiss", "gouda"];
 const PEPPERS = ["bell pepper", "peppers", "pepper", "jalapeño", "jalapeno", "poblano", "banana pepper"];
 const NOT_PEPPER = ["black pepper", "pepper flake", "peppercorn", "cayenne", "white pepper", "pepper jack"];
@@ -52,7 +57,7 @@ export const TEMPLATES: Template[] = [
     parts: [
       { role: "chips", any: CHIPS, amount: "1 large bag" },
       { role: "cheese", any: CHEESE, amount: "2 cups, shredded" },
-      { role: "main", any: MEAT, amount: "2–3 links or about 300 g" },
+      { role: "main", any: MEAT, not: NOT_MEAT, amount: "2–3 links or about 300 g" },
       { role: "sour cream", any: ["sour cream", "crema", "greek yogurt"], amount: "for dolloping", optional: true },
       { role: "peppers", any: PEPPERS, not: NOT_PEPPER, amount: "1, sliced", optional: true },
       { role: "salsa", any: ["salsa", "pico de gallo", "tomato"], amount: "½ cup", optional: true },
@@ -71,7 +76,7 @@ export const TEMPLATES: Template[] = [
     id: "queso-dip", title: "{main} queso dip", meals: ["snack"], occasions: ["game day", "party", "movie night"], minutes: 20, serves: "6 as a dip",
     parts: [
       { role: "cheese", any: CHEESE, amount: "2 cups, shredded" },
-      { role: "main", any: MEAT, amount: "2 links or about 250 g, casings off" },
+      { role: "main", any: MEAT, not: NOT_MEAT, amount: "2 links or about 250 g, casings off" },
       { role: "dairy", any: ["cream cheese", "milk", "cream", "evaporated milk", "half and half"], not: ["sour cream", "ice cream"], amount: "½ cup milk or 120 g cream cheese" },
       { role: "dippers", any: CHIPS, amount: "for dipping", optional: true },
       { role: "peppers", any: PEPPERS, not: NOT_PEPPER, amount: "1–2, diced", optional: true },
@@ -105,7 +110,7 @@ export const TEMPLATES: Template[] = [
     parts: [
       { role: "tortillas", any: ["tortilla", "wrap", "flatbread"], amount: "4 large" },
       { role: "cheese", any: CHEESE, amount: "2 cups, shredded" },
-      { role: "main", any: MEAT, amount: "2 links or about 250 g, cooked and sliced" },
+      { role: "main", any: MEAT, not: NOT_MEAT, amount: "2 links or about 250 g, cooked and sliced" },
       { role: "peppers", any: PEPPERS, not: NOT_PEPPER, amount: "1, sliced", optional: true },
       { role: "onion", any: ONION, amount: "½, sliced", optional: true },
       { role: "sour cream", any: ["sour cream", "salsa", "guacamole"], amount: "to serve", optional: true },
@@ -181,7 +186,7 @@ export const TEMPLATES: Template[] = [
     id: "sausage-pasta", title: "{main} pasta", meals: ["dinner"], occasions: ["weeknight"], minutes: 30, serves: "4",
     parts: [
       { role: "pasta", any: ["pasta", "penne", "rigatoni", "spaghetti", "macaroni", "noodle"], amount: "400 g" },
-      { role: "main", any: MEAT, amount: "3–4 links or 400 g" },
+      { role: "main", any: MEAT, not: NOT_MEAT, amount: "3–4 links or 400 g" },
       { role: "sauce", any: ["tomato", "crushed tomatoes", "pasta sauce", "marinara", "cream"], amount: "1 can or jar" },
       { role: "cheese", any: ["parmesan", ...CHEESE], amount: "to finish", optional: true },
       { role: "greens", any: ["spinach", "kale", "peppers", "peas"], not: NOT_PEPPER, amount: "a couple of handfuls", optional: true },
@@ -229,7 +234,7 @@ export const TEMPLATES: Template[] = [
     id: "fried-rice", title: "{main} fried rice", meals: ["dinner", "lunch"], occasions: ["weeknight"], minutes: 20, serves: "3–4",
     parts: [
       { role: "rice", any: ["cooked rice", "leftover rice", "rice"], not: ["rice vinegar"], amount: "3–4 cups, cooked and cold" },
-      { role: "main", any: MEAT, amount: "about 250 g, diced" },
+      { role: "main", any: MEAT, not: NOT_MEAT, amount: "about 250 g, diced" },
       { role: "eggs", any: ["egg"], amount: "2–3", optional: true },
       { role: "veg", any: ["peas", "carrot", "frozen vegetables", "mixed vegetables", "peppers", "corn", "green onion"], not: NOT_PEPPER, amount: "1½ cups", optional: true },
       { role: "soy", any: ["soy sauce", "tamari"], amount: "2–3 tbsp" },
@@ -249,7 +254,7 @@ export const TEMPLATES: Template[] = [
       { role: "beans", any: ["refried beans", "black beans", "beans"], amount: "1 can" },
       { role: "salsa", any: ["salsa", "tomato", "pico de gallo"], amount: "1 cup" },
       { role: "dippers", any: CHIPS, amount: "1 bag", optional: true },
-      { role: "main", any: MEAT, amount: "250 g, cooked and crumbled", optional: true },
+      { role: "main", any: MEAT, not: NOT_MEAT, amount: "250 g, cooked and crumbled", optional: true },
       { role: "onion", any: ["green onion", "scallion", "onion"], amount: "2, sliced", optional: true },
     ],
     steps: [
@@ -279,7 +284,7 @@ export const TEMPLATES: Template[] = [
       { role: "base", any: ["naan", "flatbread", "pita", "tortilla", "pizza dough", "pizza crust"], amount: "4" },
       { role: "cheese", any: ["mozzarella", ...CHEESE], amount: "2 cups, shredded" },
       { role: "sauce", any: ["pizza sauce", "pasta sauce", "tomato", "marinara", "bbq sauce"], amount: "½ cup" },
-      { role: "main", any: MEAT, amount: "2 links or 200 g, cooked and sliced", optional: true },
+      { role: "main", any: MEAT, not: NOT_MEAT, amount: "2 links or 200 g, cooked and sliced", optional: true },
       { role: "peppers", any: PEPPERS, not: NOT_PEPPER, amount: "1, sliced", optional: true },
       { role: "onion", any: ONION, amount: "½, sliced", optional: true },
     ],
@@ -303,6 +308,54 @@ export const TEMPLATES: Template[] = [
       "Brown the sliced {main} in a pot; add the onion for a few minutes.",
       "Add potatoes and broth, simmer 20 minutes until tender.",
       "Stir in greens until wilted, then a splash of cream. Season to taste.",
+    ],
+  },
+  {
+    id: "split-pea-bone-soup", title: "Split pea soup with {main}", meals: ["dinner", "lunch"], occasions: ["weeknight"], minutes: 150, serves: "6",
+    parts: [
+      { role: "main", any: BONES, amount: "2 meaty bones" },
+      { role: "peas", any: ["split pea", "split peas"], amount: "2 cups, rinsed" },
+      { role: "broth", any: ["stock", "broth"], amount: "1.5 L (or use water)", optional: true },
+      { role: "onion", any: [...ONION, "garlic"], amount: "1, diced" },
+      { role: "carrot", any: ["carrot"], amount: "2, diced", optional: true },
+      { role: "celery", any: ["celery"], amount: "2 stalks, diced", optional: true },
+      { role: "salt", any: ["salt"], amount: "to taste", basic: true },
+    ],
+    steps: [
+      "Put the {main}, peas, onion and stock (or water) in a large pot; add 1 L of water if it's short of covering.",
+      "Bring to a boil, skim, then simmer gently 2–2½ hours, stirring now and then, until the peas have melted into the soup.",
+      "Lift out the bones, pull off the meat and stir it back in. Add the carrot and celery for the last 30 minutes.",
+      "Season to taste at the end; the bones may already be salty.",
+    ],
+  },
+  {
+    id: "bone-vegetable-soup", title: "{main} and vegetable soup", meals: ["dinner", "lunch"], occasions: ["weeknight"], minutes: 120, serves: "6",
+    parts: [
+      { role: "main", any: BONES, amount: "2 meaty bones" },
+      { role: "veg", any: ROOT_VEG, amount: "about 4 cups, chopped" },
+      { role: "broth", any: ["stock", "broth"], amount: "1.5 L (or use water)", optional: true },
+      { role: "onion", any: [...ONION, "garlic"], amount: "1, diced", optional: true },
+      { role: "grain", any: ["barley", "rice", "noodles", "egg noodles", "pasta"], amount: "½ cup", optional: true },
+    ],
+    steps: [
+      "Simmer the {main} in the stock (or water) 1½ hours, skimming off the foam.",
+      "Add the vegetables and the onion; simmer 30 minutes more. Add the grain for the last 15–20.",
+      "Take the bones out, pull the meat off and return it to the pot. Season to taste.",
+    ],
+  },
+  {
+    id: "beef-stew", title: "{main} stew", meals: ["dinner"], occasions: ["weeknight"], minutes: 150, serves: "4–6",
+    parts: [
+      { role: "main", any: STEW_MEAT, amount: "about 700 g" },
+      { role: "potatoes", any: ["potato"], amount: "4 medium, chunked" },
+      { role: "carrot", any: ["carrot"], amount: "3, chunked", optional: true },
+      { role: "broth", any: ["stock", "broth"], amount: "750 mL", optional: true },
+      { role: "onion", any: ONION, amount: "1, diced", optional: true },
+    ],
+    steps: [
+      "Thaw the meat in the fridge if frozen. Pat dry and brown it in batches; set aside.",
+      "Soften the onion, return the meat, add the stock (or water) and simmer 1½ hours.",
+      "Add the potatoes and carrot; cook 40 minutes more until the meat is tender.",
     ],
   },
 ];
@@ -344,7 +397,9 @@ export function safetyFor(ingredients: IdeaIngredient[]): string[] {
   const out: string[] = [];
   const sausage = ingredients.find((i) => i.status === "have" && SAUSAGE.some((w) => i.name.toLowerCase().includes(w)));
   if (sausage) out.push(`${cap(sausage.name)}: homemade sausage is fresh, raw sausage — cook it to 71 °C / 160 °F inside (74 °C / 165 °F if it has chicken in it) before slicing it into anything.`);
-  if (ingredients.some((i) => i.status === "have" && /chicken|turkey/i.test(i.name))) out.push("Poultry: cook to 74 °C / 165 °F.");
+  if (ingredients.some((i) => i.status === "have" && /chicken|turkey/i.test(i.name) && !/stock|broth/i.test(i.name))) out.push("Poultry: cook to 74 °C / 165 °F.");
+  const bones = ingredients.find((i) => i.status === "have" && /\bbones?\b|\bhock\b/i.test(i.name));
+  if (bones && /freezer/i.test(bones.evidence)) out.push(`${cap(bones.name)} are frozen: thaw them in the fridge overnight, or start them from frozen in cold water and allow extra time. Simmer until the meat falls from the bone; reheat the soup to a full boil (74 °C / 165 °F) if you cool and keep it.`);
   return out;
 }
 

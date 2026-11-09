@@ -65,6 +65,11 @@ export function RecipeListPage() {
         <Link to="/data" className="shrink-0 text-sm text-sage underline">Backup &amp; import</Link>
       </header>
 
+      <Link to="/food" className="mb-5 flex min-h-16 items-center justify-center gap-3 rounded-3xl bg-sage text-xl font-bold text-white shadow-md transition hover:bg-sage/90">
+        <span aria-hidden className="text-2xl">📷</span> Add food
+        <span className="text-sm font-medium text-white/80">photo · say it · done</span>
+      </Link>
+
       <SausageDayHome />
 
       <TonightAsk />

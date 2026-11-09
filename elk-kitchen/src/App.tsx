@@ -7,6 +7,7 @@ import { RecipeFormPage } from "./pages/RecipeFormPage";
 import { CookEntryPage } from "./pages/CookEntryPage";
 import { DataPage } from "./pages/DataPage";
 import { PhotoCapturePage } from "./pages/PhotoCapturePage";
+import { AddFoodPage } from "./pages/AddFoodPage";
 import { PantryPage } from "./pages/PantryPage";
 import { StartCookingPage } from "./pages/StartCookingPage";
 import { CookingSessionPage } from "./pages/CookingSessionPage";
@@ -34,6 +35,7 @@ function App() {
             <Route path="/add" element={<RecipeFormPage />} />
             <Route path="/add/photo" element={<PhotoCapturePage />} />
             <Route path="/pantry" element={<PantryPage />} />
+            <Route path="/food" element={<AddFoodPage />} />
             <Route path="/recipe/:id" element={<RecipeDetailPage />} />
             <Route path="/recipe/:id/edit" element={<RecipeFormPage />} />
             <Route path="/recipe/:id/cook" element={<CookEntryPage />} />
