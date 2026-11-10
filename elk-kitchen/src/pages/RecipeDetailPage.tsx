@@ -10,6 +10,8 @@ import { safetyChecks } from "../lib/meat";
 import { useLoad } from "../lib/useLoad";
 import { RecipeLearning } from "../components/RecipeLearning";
 import { StartCookingButton } from "./StartCookingPage";
+import { UnitsToggle, useUnitSystem } from "../components/UnitsToggle";
+import { displayMeasures } from "../lib/units";
 import type { CookingEntry, RecipeKind } from "../types/recipe";
 
 export function RecipeDetailPage() {
@@ -17,6 +19,7 @@ export function RecipeDetailPage() {
   const { store } = useKitchen();
   const navigate = useNavigate();
   const { data: detail, error, reload } = useLoad(() => store.getRecipe(id), [store, id]);
+  const [units, setUnits] = useUnitSystem();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -99,7 +102,7 @@ export function RecipeDetailPage() {
 
         {!removed && <div className="mt-5"><StartCookingButton recipe={recipe} /></div>}
         {recipe.photos.length > 0 && <div className="mt-5"><PhotoGallery photos={recipe.photos} /></div>}
-        {recipe.kind !== "general" && <div className="mt-5 rounded-xl border border-clay bg-white/60 p-4"><DetailsSummary kind={recipe.kind} d={recipe.details} /></div>}
+        {recipe.kind !== "general" && <div className="mt-5 rounded-xl border border-clay bg-white/60 p-4"><DetailsSummary kind={recipe.kind} d={recipe.details} units={units} /></div>}
 
         {recipe.tags.length > 0 && (
           <div className="mt-5">
@@ -115,9 +118,10 @@ export function RecipeDetailPage() {
         )}
 
         <dl className="mt-6 space-y-6">
-          <Field label="Ingredients" text={recipe.ingredients} />
+          <Field label="Ingredients" text={displayMeasures(recipe.ingredients, units)} />
+          <div><UnitsToggle system={units} onChange={setUnits} /></div>
           {!removed && <PantryCheck ingredients={recipe.ingredients} title={recipe.title} />}
-          <Field label="Method" text={recipe.instructions} />
+          <Field label="Method" text={displayMeasures(recipe.instructions, units)} />
           <Field label="Notes" text={recipe.notes} />
           {recipe.approxCalories != null && <Field label="Approx calories" text={String(recipe.approxCalories)} />}
         </dl>

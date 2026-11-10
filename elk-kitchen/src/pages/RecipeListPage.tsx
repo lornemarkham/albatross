@@ -13,6 +13,7 @@ import { checkRecipe } from "../lib/pantryCheck";
 import { ContinueCooking } from "./StartCookingPage";
 import { HistoryCard, cookingHistory } from "./HistoryPage";
 import { AskBox } from "./CompanionPage";
+import { ensureHouseholdRecipes } from "../lib/household/staples";
 import { SausageDayHome } from "../components/SausageDayHome";
 
 // Matches every word typed, anywhere in the title, ingredients, tags, author or notes.
@@ -37,7 +38,8 @@ export function RecipeListPage() {
   const [q, setQ] = useState("");
   const [showRemoved, setShowRemoved] = useState(false);
   const removed = useLoad(() => (showRemoved ? store.listRemoved() : Promise.resolve(null)), [store, showRemoved]);
-  const { data: recipes, error } = useLoad(() => store.listRecipes(), [store]);
+  // Staples, dressings and the sausage cards are in the book once; the list loads after.
+  const { data: recipes, error } = useLoad(async () => { await ensureHouseholdRecipes(store).catch(() => 0); return store.listRecipes(); }, [store]);
   const notImported = useLoad(async () => {
     if (store.mode !== "family") return 0;
     const device = readDeviceData(window.localStorage);

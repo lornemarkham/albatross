@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { displayMeasures, type UnitSystem } from "../lib/units";
 import { safetyChecks, safetyGuidance, SAFETY_SOURCE, seasoningLines, yieldPercent, type SafetyNote } from "../lib/meat";
 import type { MeatDetails, RecipeKind } from "../types/recipe";
 import { inputClass, labelClass, sectionLabel } from "./ui";
@@ -108,7 +109,7 @@ export function FoodSafetyPanel({ kind }: { kind: RecipeKind }) {
 }
 
 // Read-only summary of the numbers that were filled in.
-export function DetailsSummary({ kind, d }: { kind: RecipeKind; d: MeatDetails }) {
+export function DetailsSummary({ kind, d, units = "as-written" }: { kind: RecipeKind; d: MeatDetails; units?: UnitSystem }) {
   const rows: [string, string][] = [];
   const add = (l: string, v: string | number | null, u = "") => { if (v !== null && v !== "") rows.push([l, `${v}${u}`]); };
   add("Meat", d.meatType);
@@ -133,7 +134,7 @@ export function DetailsSummary({ kind, d }: { kind: RecipeKind; d: MeatDetails }
       )}
       {lines.length > 0 && (
         <div><p className="text-xs font-semibold text-sage">Seasoning</p>
-          <ul>{lines.map((l, i) => <li key={i}>{l.grams != null ? `${l.name} ${l.percent}% = ${l.grams} g` : l.raw}</li>)}</ul></div>
+          <ul>{lines.map((l, i) => <li key={i}>{displayMeasures(l.grams != null ? `${l.name} ${l.percent}% = ${l.grams} g` : l.raw, units)}</li>)}</ul></div>
       )}
       {d.marinade.trim() && <div><p className="text-xs font-semibold text-sage">Marinade</p><p className="whitespace-pre-wrap">{d.marinade}</p></div>}
     </div>
