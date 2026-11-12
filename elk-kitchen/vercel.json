@@ -1,6 +1,6 @@
 {
   "rewrites": [
     { "source": "/api/extract", "destination": "https://elk-inventory.vercel.app/api/extract" },
-    { "source": "/((?!assets/|api/).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|api/|sw\\.js|manifest\\.webmanifest|icon-|apple-touch-icon).*)", "destination": "/index.html" }
   ]
 }

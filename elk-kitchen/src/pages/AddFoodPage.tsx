@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { PhotoImg } from "../components/Photos";
 import { inputClass, primaryButton, secondaryButton, sectionLabel } from "../components/ui";
 import { useKitchen } from "../context/KitchenContext";
@@ -34,7 +34,9 @@ export function AddFoodPage() {
   const client = supabase;
   const notes = useMemo(() => new FoodStore(window.localStorage), []);
   const stock = useLoad(async () => (member && client ? loadStock(client) : null), [member, client]);
-  const [text, setText] = useState("");
+  // The kitchen screen's shortcuts start the sentence ("Leftover …"); nothing is saved until Save.
+  const [params] = useSearchParams();
+  const [text, setText] = useState(() => params.get("say") ?? "");
   const [shots, setShots] = useState<Shot[]>([]);
   const [suggestions, setSuggestions] = useState<FoodSuggestion[] | null>(null);
   const [picked, setPicked] = useState<FoodSuggestion | null>(null);

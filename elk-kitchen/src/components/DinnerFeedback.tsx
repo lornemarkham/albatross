@@ -3,6 +3,7 @@ import { useKitchen } from "../context/KitchenContext";
 import { useLoad } from "../lib/useLoad";
 import { SCORE_FIELDS, blankFeedbackScores, type FeedbackInput, type FeedbackScores, type MakeAgain, type MealFeedback } from "../types/feedback";
 import { hasScores } from "../lib/familyMemory";
+import { MAX_STARS, litStars, ratingToStars, starText, starsToRating } from "../lib/home/stars";
 import type { CookingEntry } from "../types/recipe";
 import { PhotoGallery, PhotoPicker } from "./Photos";
 import { inputClass, labelClass, primaryButton, secondaryButton } from "./ui";
@@ -47,10 +48,11 @@ export function DinnerFeedback({ entry, favourite, onFavourite, onSaved }: { ent
       {editing === "new" ? (
         <div className="mt-3 rounded-xl border border-sage/40 bg-white/60 p-3">
           <FeedbackForm entry={entry} base={null} shared={shared} defaultName={shared ? myName : ""}
+            knownNames={[...new Set(data.items.map((f) => f.authorName.trim()).filter(Boolean))].filter((n) => !mineList.some((f) => f.authorName.trim().toLowerCase() === n.toLowerCase()))}
             onDone={() => { setEditing(null); reload(); onSaved?.(); }} onCancel={() => setEditing(null)} />
         </div>
-      ) : (
-        editing === null && (!shared || !myOwn) && (
+      ) : editing === null && (
+        shared && myOwn ? <RateOnOwnPhone /> : (
           <button type="button" className={`${primaryButton} mt-3`} onClick={() => setEditing("new")}>
             {shared ? "Add how it was for you" : mineList.length ? "Add someone else's" : "How was it?"}
           </button>
@@ -70,7 +72,7 @@ function FeedbackCard({ f, canEdit, onEdit }: { f: MealFeedback; canEdit: boolea
       <div className="flex items-baseline justify-between gap-2">
         <p className="font-semibold text-bark">
           {f.authorName || "Someone"}
-          {f.rating != null && <span className="ml-2 font-normal text-bark/80">★ {f.rating}/10</span>}
+          {f.rating != null && <span className="ml-2 font-normal text-saffron" title={`${f.rating}/10`}>{starText(f.rating)}</span>}
           {f.makeAgain && <span className="ml-2 text-sm font-normal text-sage">{againLabel(f.makeAgain)}</span>}
         </p>
         {canEdit && <button type="button" className="text-sm text-sage underline" onClick={onEdit}>Change</button>}
@@ -89,8 +91,8 @@ function FeedbackCard({ f, canEdit, onEdit }: { f: MealFeedback; canEdit: boolea
   );
 }
 
-function FeedbackForm({ entry, base, shared, defaultName, onDone, onCancel }: {
-  entry: CookingEntry; base: MealFeedback | null; shared: boolean; defaultName: string; onDone: () => void; onCancel: () => void;
+function FeedbackForm({ entry, base, shared, defaultName, onDone, onCancel, knownNames = [] }: {
+  entry: CookingEntry; base: MealFeedback | null; shared: boolean; defaultName: string; onDone: () => void; onCancel: () => void; knownNames?: string[];
 }) {
   const { store } = useKitchen();
   const [name, setName] = useState(defaultName);
@@ -100,6 +102,8 @@ function FeedbackForm({ entry, base, shared, defaultName, onDone, onCancel }: {
   const [rating, setRating] = useState<number | null>(base?.rating ?? null);
   const [scores, setScores] = useState<FeedbackScores>(base?.scores ?? blankFeedbackScores());
   const [detail, setDetail] = useState(hasScores(base?.scores));
+  // An older 0–10 score that isn't a whole number of stars opens the exact picker, so it's never silently rounded.
+  const [exact, setExact] = useState(base?.rating != null && base.rating % 2 !== 0);
   const [comment, setComment] = useState(base?.comment ?? "");
   const [improvement, setImprovement] = useState(base?.improvement ?? "");
   const [again, setAgain] = useState<MakeAgain | null>(base?.makeAgain ?? null);
@@ -128,13 +132,33 @@ function FeedbackForm({ entry, base, shared, defaultName, onDone, onCancel }: {
       {shared ? (
         <p className="text-sm text-bark/70">From <strong>{defaultName || "you"}</strong> (your name on the family list)</p>
       ) : (
-        <label className={labelClass}>Who's this from?
-          <input className={inputClass} value={name} disabled={!!base} onChange={(e) => setName(e.target.value)} placeholder="Your name" maxLength={60} />
-        </label>
+        <div>
+          <label className={labelClass}>Who's this from?
+            <input className={inputClass} value={name} disabled={!!base} onChange={(e) => setName(e.target.value)} placeholder="Your name" maxLength={60} />
+          </label>
+          {!base && knownNames.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Pick your name">
+              {knownNames.map((n) => (
+                <button key={n} type="button" aria-pressed={name === n} onClick={() => setName(n)}
+                  className={`min-h-12 rounded-full border px-4 text-base ${name === n ? "border-sage bg-sage text-white" : "border-clay bg-cream text-bark"}`}>{n}</button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       <fieldset>
-        <legend className={labelClass}>Rating <span className="text-sm font-normal text-bark/60">(optional)</span></legend>
-        <div className="mt-1 flex flex-wrap gap-1.5">
+        <legend className={labelClass}>Rating <span className="text-sm font-normal text-bark/60">(optional){rating != null && ` · ${ratingToStars(rating)} stars`}</span></legend>
+        <div className="mt-1 flex gap-1" role="group" aria-label="Stars">
+          {Array.from({ length: MAX_STARS }, (_, n) => n + 1).map((n) => (
+            <button key={n} type="button" aria-label={`${n} star${n === 1 ? "" : "s"}`} aria-pressed={litStars(rating) === n && rating === starsToRating(n)}
+              onClick={() => setRating(rating === starsToRating(n) ? null : starsToRating(n))}
+              className={`h-14 w-14 rounded-2xl text-4xl leading-none ${n <= litStars(rating) ? "text-saffron" : "text-clay"}`}>★</button>
+          ))}
+        </div>
+        <button type="button" className="mt-1 text-sm text-sage underline" onClick={() => setExact((v) => !v)} aria-expanded={exact}>
+          {exact ? "Hide exact score" : "Exact score out of 10"}
+        </button>
+        <div className={`mt-1 flex-wrap gap-1.5 ${exact ? "flex" : "hidden"}`}>
           {Array.from({ length: 11 }, (_, n) => n).map((n) => (
             <button key={n} type="button" aria-pressed={rating === n} onClick={() => setRating(rating === n ? null : n)}
               className={`h-11 w-11 rounded-full border text-base ${rating === n ? "border-sage bg-sage text-white" : "border-clay bg-cream text-bark"}`}>{n}</button>
@@ -181,6 +205,22 @@ function FeedbackForm({ entry, base, shared, defaultName, onDone, onCancel }: {
         <button type="button" className={primaryButton} disabled={busy || (!shared && !name.trim())} onClick={save}>{busy ? "Saving…" : "Save"}</button>
         <button type="button" className={secondaryButton} onClick={onCancel}>Cancel</button>
       </div>
+    </div>
+  );
+}
+
+// A shared screen is signed in as one person, and a rating is always the
+// signed-in person's (the database sets the name). Everyone else rates from
+// their own phone: same dinner, same page.
+function RateOnOwnPhone() {
+  const url = window.location.href;
+  const share = (navigator as Navigator & { share?: (d: { title: string; url: string }) => Promise<void> }).share;
+  return (
+    <div className="mt-3 rounded-xl border border-clay bg-cream p-3 text-sm text-bark">
+      <p className="font-semibold">Someone else rating?</p>
+      <p className="mt-1 text-bark/75">Ratings are saved under the account signed in here. Others open this dinner on their own phone and rate it there, signed in as themselves:</p>
+      <p className="mt-1 break-all font-mono text-xs text-bark/70">{url}</p>
+      {share && <button type="button" className={`${secondaryButton} mt-2`} onClick={() => share.call(navigator, { title: "Rate tonight's dinner", url }).catch(() => {})}>Send the link</button>}
     </div>
   );
 }

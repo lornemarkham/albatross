@@ -4,7 +4,9 @@ import { addToShoppingList } from "../lib/pantry";
 import { checkRecipe, type LineCheck } from "../lib/pantryCheck";
 import { supabase } from "../lib/supabase";
 import { usePantry } from "../lib/usePantry";
-import { INVENTORY_PANTRY_URL } from "../pages/PantryPage";
+import { useKitchen } from "../context/KitchenContext";
+import { useLoad } from "../lib/useLoad";
+import { loadOpenShopping, onListAlready } from "../lib/companion/shopping";
 import { sectionLabel } from "./ui";
 
 // This recipe against ELK Pantry: what Pantry confirms, what it shows none
@@ -48,7 +50,7 @@ export function PantryCheck({ ingredients, title }: { ingredients: string; title
           ))}
         </ul>
       )}
-      <ShoppingPicker lines={c.lines} title={title} />
+      <ShoppingPicker key={c.lines.map((l) => l.status.state).join()} lines={c.lines} title={title} />
       <p className="mt-2 text-xs text-bark/50">Pantry counts packages, not amounts, and only knows what's been entered in ELK Inventory.</p>
     </section>
   );
@@ -57,16 +59,22 @@ export function PantryCheck({ ingredients, title }: { ingredients: string; title
 // What this recipe might need buying. Pantry's "none left" are ticked; what
 // Pantry doesn't know about is listed unticked — only the person knows.
 function ShoppingPicker({ lines, title }: { lines: LineCheck[]; title: string }) {
+  const { member } = useKitchen();
   const candidates = lines.filter((l) => l.status.state === "missing" || l.status.state === "unknown");
+  const nameOf = (l: LineCheck) => (l.status.state === "missing" ? l.status.item.name : l.name);
+  // What's already on the family's list is shown, not ticked — it would be skipped anyway.
+  const open = useLoad(async () => (member && supabase ? loadOpenShopping(supabase) : null), [member]);
+  const openNames = open.data?.status === "ready" ? open.data.names : [];
   const [picked, setPicked] = useState<Set<number>>(
     () => new Set(candidates.map((l, i) => (l.status.state === "missing" ? i : -1)).filter((i) => i >= 0)));
+  const listed = (l: LineCheck) => onListAlready(nameOf(l), openNames);
+  const chosen = candidates.map((l, i) => ({ l, i })).filter(({ l, i }) => picked.has(i) && !listed(l));
   const [state, setState] = useState<"idle" | "saving" | { done: string } | { error: string }>("idle");
   if (candidates.length === 0 || !supabase) return null;
 
   const toggle = (i: number) => setPicked((p) => { const n = new Set(p); if (n.has(i)) n.delete(i); else n.add(i); return n; });
   async function add() {
-    const names = candidates.filter((_, i) => picked.has(i))
-      .map((l) => (l.status.state === "missing" ? l.status.item.name : l.name));
+    const names = chosen.map(({ l }) => nameOf(l));
     setState("saving");
     const r = await addToShoppingList(supabase!, names, title);
     setState(!r.ok ? { error: r.error }
@@ -81,22 +89,22 @@ function ShoppingPicker({ lines, title }: { lines: LineCheck[]; title: string })
         {candidates.map((l, i) => (
           <li key={i}>
             <label className="flex min-h-11 items-center gap-3 py-1">
-              <input type="checkbox" className="h-5 w-5 accent-sage" checked={picked.has(i)} onChange={() => toggle(i)} />
+              <input type="checkbox" className="h-5 w-5 accent-sage" checked={picked.has(i) && !listed(l)} disabled={listed(l)} onChange={() => toggle(i)} />
               <span className="text-bark">
-                {l.status.state === "missing" ? l.status.item.name : l.name}
-                <span className="text-bark/50">{l.status.state === "missing" ? " — Pantry shows none left" : " — Pantry doesn't know"}</span>
+                {nameOf(l)}
+                <span className="text-bark/50">{listed(l) ? " — on the shopping list already" : l.status.state === "missing" ? " — Pantry shows none left" : " — Pantry doesn't know"}</span>
               </span>
             </label>
           </li>
         ))}
       </ul>
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <button type="button" disabled={picked.size === 0 || state === "saving"} onClick={add}
+        <button type="button" disabled={chosen.length === 0 || state === "saving"} onClick={add}
           className="min-h-11 rounded-lg bg-sage px-4 font-semibold text-white disabled:opacity-50">
-          {state === "saving" ? "Adding…" : `Add ${picked.size || ""} to shopping list`}
+          {state === "saving" ? "Adding…" : `Add ${chosen.length || ""} missing to shopping list`}
         </button>
         {typeof state === "object" && "done" in state && (
-          <span className="text-sm text-sage">{state.done} <a href={INVENTORY_PANTRY_URL} className="underline">See the list</a></span>
+          <span className="text-sm text-sage">{state.done} <Link to="/shopping" className="underline">See the list</Link></span>
         )}
         {typeof state === "object" && "error" in state && <span className="text-sm text-red-700">{state.error}</span>}
       </div>

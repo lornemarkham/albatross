@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { RecipeCard } from "../components/RecipeCard";
 import { ModeNotice } from "../components/ModeNotice";
 import { inputClass } from "../components/ui";
@@ -35,7 +35,8 @@ const ACTIONS: { to: string; icon: string; label: string; sub: string }[] = [
 export function RecipeListPage() {
   const { store, member } = useKitchen();
   const [onlyFavourites, setOnlyFavourites] = useState(false);
-  const [q, setQ] = useState("");
+  const [params] = useSearchParams();
+  const [q, setQ] = useState(() => params.get("q") ?? "");
   const [showRemoved, setShowRemoved] = useState(false);
   const removed = useLoad(() => (showRemoved ? store.listRemoved() : Promise.resolve(null)), [store, showRemoved]);
   // Staples, dressings and the sausage cards are in the book once; the list loads after.
@@ -64,7 +65,10 @@ export function RecipeListPage() {
           <h1 className="font-display text-3xl font-bold tracking-tight text-bark">ELK Kitchen</h1>
           <p className="text-sm text-bark/70">Cook it, talk it through, remember it.</p>
         </div>
-        <Link to="/data" className="shrink-0 text-sm text-sage underline">Backup &amp; import</Link>
+        <div className="flex shrink-0 flex-col items-end gap-1 text-sm">
+          <Link to="/" className="font-semibold text-sage underline">← Kitchen today</Link>
+          <Link to="/data" className="text-sage underline">Backup &amp; import</Link>
+        </div>
       </header>
 
       <Link to="/food" className="mb-5 flex min-h-16 items-center justify-center gap-3 rounded-3xl bg-sage text-xl font-bold text-white shadow-md transition hover:bg-sage/90">

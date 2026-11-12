@@ -1,3 +1,10 @@
+**Status (2026-11-12, M783):** ELK Home · Kitchen Command Center is committed on `kitchen-shopping-list` on top of
+`230ea74`. `/` is now the wall/tablet kitchen screen (Today, Pantry, Recipes, Shopping, quick actions, wall mode);
+the recipe book is at `/recipes`; new `/shopping` (Inventory's shared list: add, tick off, Undo). Ratings are asked as
+1–5 stars (stored 0–10, no SQL change). PWA manifest + service worker (app shell only). Tests: 233. **No SQL needed**;
+this-device mode works as before. `vercel.json` changed only to keep `/sw.js`, the manifest and icons out of the SPA
+rewrite. Check on an iPad after deploying: see the M783 handoff ("Exact steps for Lorne").
+
 # Releasing ELK Kitchen
 
 **Status (2026-11-08, M639):** Kitchen's chef (Inventory-aware conversation, dish ideas, AI chef with an evidence check,

@@ -9,6 +9,7 @@ import { DetailsSummary, FoodSafetyPanel, SafetyNotes } from "../components/Meat
 import { safetyChecks } from "../lib/meat";
 import { useLoad } from "../lib/useLoad";
 import { RecipeLearning } from "../components/RecipeLearning";
+import { FamilyRatings } from "../components/FamilyRatings";
 import { StartCookingButton } from "./StartCookingPage";
 import { UnitsToggle, useUnitSystem } from "../components/UnitsToggle";
 import { displayMeasures } from "../lib/units";
@@ -57,7 +58,7 @@ export function RecipeDetailPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <Link to="/" className="text-sm font-medium text-sage hover:underline">← All recipes</Link>
+      <Link to="/recipes" className="text-sm font-medium text-sage hover:underline">← All recipes</Link>
 
       {removed && (
         <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -99,6 +100,7 @@ export function RecipeDetailPage() {
         )}
 
         <RecipeLearning recipe={recipe} />
+        <FamilyRatings recipe={recipe} entries={entries} favourite={favourite} />
 
         {!removed && <div className="mt-5"><StartCookingButton recipe={recipe} /></div>}
         {recipe.photos.length > 0 && <div className="mt-5"><PhotoGallery photos={recipe.photos} /></div>}

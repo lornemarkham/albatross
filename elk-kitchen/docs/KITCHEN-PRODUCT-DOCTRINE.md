@@ -446,6 +446,11 @@ Each item here is named, not resolved. None of them authorises a code change on 
 
 ---
 
+**C9. Offline pantry copy (named, not resolved).**
+
+- `src/lib/pantry.ts` says Kitchen never copies or caches stock. The M783 brief asked for "offline read-only pantry information".
+- Built: the kitchen screen keeps one read-only snapshot in the browser (`src/lib/home/snapshot.ts`), shown only when offline or when loading fails, always with the time it was read, and replaced on the next good load. Nothing is changed or queued from it. Lorne to confirm or reject (ADR 0004).
+
 ## 15. Decision log
 
 Add canonical product decisions here: the date, the decision, the reason, and a link to an ADR if one exists. Moving an item out of §12 requires an entry here.
@@ -471,3 +476,4 @@ Add canonical product decisions here: the date, the decision, the reason, and a 
 | 2026-11-08 | Add Food (M640): food enters Inventory only through `pantry_receive` after the person confirms the exact record; photo suggestions are labelled unconfirmed and never become the record by themselves; descriptive amounts are kept as the person's words beside Inventory's whole-number count; used-up food leaves stock (Inventory's count) but stays in Kitchen's history. | Owner's M640 brief §1–§6: "Never claim an uncertain identification is confirmed", "Quantities and weights are optional when unknown", "Require confirmation before destructive or ambiguous changes", "Use existing Inventory/Pantry services rather than creating a second inventory database", "Keep a historical record of consumed food without showing it as available stock". |
 | 2026-11-08 | *Proposed, not decided:* naming food from a photo through the family-only AI endpoint (`docs/decisions/0003`). | Built switched off. Needs Lorne's acceptance and a key. |
 | 2026-11-08 | *Hypothesis, not decided:* Kitchen's food notes (photos, words, use history) are kept per device and in Backup & import, not in a shared table. | M640 built it this way because the shared `kitchen_*` tables are still not in production. Q4 stays open. |
+| 2026-11-12 | (Proposed, M783) ELK Home · Kitchen is built inside ELK Kitchen: `/` is the kitchen screen, recipes at `/recipes`; ratings shown as 1–5 stars over the unchanged 0–10 scale. | ADR 0004 — awaiting Lorne's acceptance. |

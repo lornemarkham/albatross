@@ -71,3 +71,35 @@ export async function loadOpenShopping(client: SupabaseClient): Promise<OpenList
   }
   return { status: "ready", names: (data as { name: string }[]).map((r) => r.name) };
 }
+
+// The family shopping list as the kitchen screen shows it: Pantry's own rows,
+// read with the person's token, so every phone and the wall see the same list.
+export type ShoppingItem = { id: string; name: string; note: string | null; source: "manual" | "low-stock" | "recipe"; createdAt: string };
+export type ShoppingList = { status: "ready"; items: ShoppingItem[] } | { status: "not-set-up" } | { status: "error"; error: string };
+
+export async function loadShoppingList(client: SupabaseClient): Promise<ShoppingList> {
+  const { data, error } = await client.from("pantry_shopping_items").select("id,name,note,source,created_at").is("done_at", null).order("created_at").limit(500);
+  if (error) {
+    if (error.code === "PGRST205" || error.code === "42P01" || /could not find the table/i.test(error.message)) return { status: "not-set-up" };
+    return { status: "error", error: error.message };
+  }
+  return {
+    status: "ready",
+    items: (data as { id: string; name: string; note: string | null; source: ShoppingItem["source"]; created_at: string }[])
+      .map((r) => ({ id: r.id, name: r.name, note: r.note, source: r.source, createdAt: r.created_at })),
+  };
+}
+
+// "Got it" — the same plain update ELK Inventory's own list makes (its
+// setShoppingDone), so a tick on the wall shows on every phone. Undo clears it.
+// Stock doesn't change: putting groceries away is Pantry's job.
+export async function setShoppingDone(client: SupabaseClient, id: string, done: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data: u } = await client.auth.getUser();
+  const { error } = await client.from("pantry_shopping_items")
+    .update(done ? { done_at: new Date().toISOString(), done_by: u.user?.id ?? null } : { done_at: null, done_by: null })
+    .eq("id", id);
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+const normName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+export const onListAlready = (name: string, openNames: string[]) => openNames.some((n) => normName(n) === normName(name));

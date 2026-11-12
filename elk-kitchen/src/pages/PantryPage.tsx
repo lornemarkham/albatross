@@ -13,7 +13,7 @@ export function PantryPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      <Link to="/" className="text-sm font-medium text-sage hover:underline">← Recipes</Link>
+      <Link to="/" className="text-sm font-medium text-sage hover:underline">← Kitchen</Link>
       <h1 className="mt-4 text-2xl font-bold text-bark">What's in the pantry?</h1>
       <p className="mt-1 text-sm text-bark/70">
         From ELK Pantry, as the family last entered it. It only knows what's been added there — if something isn't listed,

@@ -19,6 +19,9 @@ import { PlanPage } from "./pages/PlanPage";
 import { SausageDayPage } from "./pages/SausageDayPage";
 import { FinishDayPage } from "./pages/FinishDayPage";
 import { TastingPage } from "./pages/TastingPage";
+import { KitchenHomePage } from "./pages/KitchenHomePage";
+import { ShoppingPage } from "./pages/ShoppingPage";
+import { HomeShell } from "./components/HomeShell";
 
 // "What should we cook?" (src/prototype — the name is historical). Reads the
 // family's recipes and ELK Pantry, writes nothing; its example ideas and
@@ -30,8 +33,11 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen">
         <KitchenProvider>
+          <HomeShell>
           <Routes>
-            <Route path="/" element={<RecipeListPage />} />
+            <Route path="/" element={<KitchenHomePage />} />
+            <Route path="/recipes" element={<RecipeListPage />} />
+            <Route path="/shopping" element={<ShoppingPage />} />
             <Route path="/add" element={<RecipeFormPage />} />
             <Route path="/add/photo" element={<PhotoCapturePage />} />
             <Route path="/pantry" element={<PantryPage />} />
@@ -54,6 +60,7 @@ function App() {
             <Route path="/data" element={<DataPage />} />
             <Route path="/ideas/*" element={<Suspense fallback={null}><IdeasPrototype /></Suspense>} />
           </Routes>
+          </HomeShell>
         </KitchenProvider>
       </div>
     </BrowserRouter>

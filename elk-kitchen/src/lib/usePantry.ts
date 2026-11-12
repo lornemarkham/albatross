@@ -5,11 +5,11 @@ import { useLoad } from "./useLoad";
 
 // ELK Pantry for the signed-in family member; "off" for anyone else (the
 // database would refuse them anyway).
-export function usePantry(): { pantry: PantryLoad | "off" | undefined; error: string | null } {
+export function usePantry(refresh = 0): { pantry: PantryLoad | "off" | undefined; error: string | null } {
   const { member } = useKitchen();
   const { data, error } = useLoad<PantryLoad | "off">(
     async () => (member && supabase ? loadPantry(supabase) : "off"),
-    [member],
+    [member, refresh],
   );
   return { pantry: data, error };
 }

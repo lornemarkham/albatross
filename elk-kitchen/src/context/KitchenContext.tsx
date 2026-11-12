@@ -7,6 +7,8 @@ import { SharedRecipeStore, sharedTablesReady } from "../lib/sharedRecipeStore";
 import { IndexedDbPhotoStore, SharedPhotoStore, requestPersistence, type PhotoStore } from "../lib/photos";
 import { LoginPage } from "../pages/LoginPage";
 import { DownloadDeviceExport } from "../components/DownloadDeviceExport";
+import { OfflineBoard } from "../components/KitchenPanels";
+import { readSnapshot } from "../lib/home/snapshot";
 
 type Kitchen = {
   store: RecipeStore;
@@ -50,6 +52,15 @@ export function KitchenProvider({ children }: { children: ReactNode }) {
     () => (readyStore?.mode === "family" && supabase ? new SharedPhotoStore(supabase) : devicePhotos),
     [readyStore, devicePhotos]);
   const [attempt, setAttempt] = useState(0);
+  // Back online after failing to check access: check again rather than
+  // leaving the wall on an error. (A working session is left alone.)
+  const failed = phase.kind === "error";
+  useEffect(() => {
+    if (!failed) return;
+    const again = () => setAttempt((n) => n + 1);
+    window.addEventListener("online", again);
+    return () => window.removeEventListener("online", again);
+  }, [failed]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -101,6 +112,18 @@ export function KitchenProvider({ children }: { children: ReactNode }) {
     return <Centered><p className="text-bark/70">Loading…</p></Centered>;
   }
   if (phase.kind === "signed-out") return <LoginPage />;
+  // No internet, so access can't be checked: show what this screen last saw
+  // (read-only, timed), never anything new, and nothing can change.
+  const offlineSnap = phase.kind === "error" && !navigator.onLine ? readSnapshot(window.localStorage) : null;
+  if (offlineSnap) {
+    return (
+      <div className="mx-auto max-w-[1400px] px-4 py-5">
+        <p role="status" className="mb-4 rounded-2xl bg-saffron px-4 py-3 text-lg font-semibold text-cocoa">Offline — this is what the kitchen screen last saw. It will refresh when the internet is back.</p>
+        <OfflineBoard snap={offlineSnap} />
+        <button type="button" onClick={() => setAttempt((n) => n + 1)} className="mt-4 min-h-14 rounded-2xl border border-clay bg-cream px-5 text-lg">Try again</button>
+      </div>
+    );
+  }
   if (phase.kind === "not-member" || phase.kind === "error") {
     return (
       <Centered>
